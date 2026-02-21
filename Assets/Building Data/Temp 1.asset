@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a8d44034b2836fa4fb2313204b92712a, type: 3}
+  m_Name: Temp 1
+  m_EditorClassIdentifier: Assembly-CSharp::BuildingStyleSO
+  buildingName: Temp 1
+  groundPrefab: {fileID: 5632795276564431907, guid: 2df3a795c47d7414382517df1195b64d, type: 3}
+  floorPrefab: {fileID: 5632795276564431907, guid: 2df3a795c47d7414382517df1195b64d, type: 3}
+  completedPrefab: {fileID: 6798087461037921506, guid: 6a8c7f56b14197e43af479f679195f58, type: 3}

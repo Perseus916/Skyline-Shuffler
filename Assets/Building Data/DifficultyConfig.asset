@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 86b68229ad6d4bb4da43d9ae87ab70a8, type: 3}
+  m_Name: DifficultyConfig
+  m_EditorClassIdentifier: Assembly-CSharp::DifficultyConfigSO
+  exponent: 0.25
+  baseComplexity: 1
+  level100OptimalMoves: 16
+  level500OptimalMoves: 24
+  level1000OptimalMoves: 28
+  maxOptimalMoves: 35
+  level100Cognitive: 30
+  level500Cognitive: 65
+  playerLimitMultiplier: 2.5
+  playerLimitRounding: 5
+  breatherMinGap: 5
+  breatherMaxGap: 12
+  breatherDifficultyMultiplier: 0.7
+  basePerfectBonus: 10
+  bonusPerLevel: 0.1
+  maxPerfectBonus: 100
+  gridExpansionLevel: 500
+  gridExpansionLevel2: 1500
+  baseStackHeight: 3
+  stackHeightIncrease1: 100
+  stackHeightIncrease2: 300
+  stackHeightIncrease3: 600
+  tutorialEnd: 5
+  easyEnd: 30
+  mediumEnd: 100
+  hardEnd: 300
+  expertEnd: 700
