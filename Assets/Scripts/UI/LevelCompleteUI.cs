@@ -4,8 +4,7 @@ using TMPro;
 using System.Collections;
 
 /// <summary>
-/// Level complete popup shown when player finishes a level.
-/// Displays stars with animation and navigation buttons.
+/// Level complete popup. Shows stars, coins earned, double reward ad, and navigation.
 /// </summary>
 public class LevelCompleteUI : MonoBehaviour
 {
@@ -16,37 +15,43 @@ public class LevelCompleteUI : MonoBehaviour
     [Header("Display")]
     [SerializeField] private TextMeshProUGUI levelText;
     [SerializeField] private TextMeshProUGUI movesText;
+    [SerializeField] private TextMeshProUGUI coinsEarnedText;
     [SerializeField] private GameObject[] starObjects; // 3 stars
     
     [Header("Buttons")]
     [SerializeField] private Button nextLevelButton;
     [SerializeField] private Button replayButton;
     [SerializeField] private Button menuButton;
+    [SerializeField] private Button doubleRewardButton; // Watch ad to 2× coins
+    
+    [Header("Double Reward")]
+    [SerializeField] private TextMeshProUGUI doubleButtonText;
+    [SerializeField] private GameObject doubleRewardBadge; // "2×" badge visual
     
     [Header("Animation")]
     [SerializeField] private float starDelay = 0.3f;
     [SerializeField] private float fadeInDuration = 0.3f;
     
     private int earnedStars;
+    private int coinsEarned;
+    private bool hasDoubled;
     
     private void Awake()
     {
-        // Hide on start
         if (panel != null)
             panel.SetActive(false);
         
-        // Setup buttons
         nextLevelButton?.onClick.AddListener(OnNextLevel);
         replayButton?.onClick.AddListener(OnReplay);
         menuButton?.onClick.AddListener(OnMenu);
+        doubleRewardButton?.onClick.AddListener(OnDoubleReward);
     }
     
-    /// <summary>
-    /// Show the level complete popup
-    /// </summary>
-    public void Show(int levelNumber, int movesTaken, int optimalMoves, int stars)
+    public void Show(int levelNumber, int movesTaken, int optimalMoves, int stars, int coins)
     {
         earnedStars = stars;
+        coinsEarned = coins;
+        hasDoubled = false;
         
         if (levelText != null)
             levelText.text = $"Level {levelNumber}";
@@ -54,27 +59,44 @@ public class LevelCompleteUI : MonoBehaviour
         if (movesText != null)
             movesText.text = $"Completed in {movesTaken} moves";
         
+        if (coinsEarnedText != null)
+            coinsEarnedText.text = $"+{coins} 🪙";
+        
         // Hide all stars initially
         if (starObjects != null)
         {
             foreach (var star in starObjects)
-            {
-                if (star != null)
-                    star.SetActive(false);
-            }
+                if (star != null) star.SetActive(false);
         }
         
-        // Show panel
+        // Show double reward button only if ad is available
+        if (doubleRewardButton != null)
+        {
+            bool adReady = AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady();
+            doubleRewardButton.gameObject.SetActive(adReady);
+            doubleRewardButton.interactable = adReady;
+        }
+        
+        if (doubleButtonText != null)
+            doubleButtonText.text = $"📺 Double → +{coins * 2} 🪙";
+        
+        if (doubleRewardBadge != null)
+            doubleRewardBadge.SetActive(true);
+        
         if (panel != null)
             panel.SetActive(true);
         
-        // Animate
         StartCoroutine(AnimateShow());
+    }
+    
+    // Backward compatible overload
+    public void Show(int levelNumber, int movesTaken, int optimalMoves, int stars)
+    {
+        Show(levelNumber, movesTaken, optimalMoves, stars, 0);
     }
     
     private IEnumerator AnimateShow()
     {
-        // Fade in
         if (canvasGroup != null)
         {
             canvasGroup.alpha = 0;
@@ -88,25 +110,48 @@ public class LevelCompleteUI : MonoBehaviour
             canvasGroup.alpha = 1;
         }
         
-        // Animate stars one by one
         if (starObjects != null)
         {
             for (int i = 0; i < earnedStars && i < starObjects.Length; i++)
             {
                 yield return new WaitForSeconds(starDelay);
                 if (starObjects[i] != null)
-                {
                     starObjects[i].SetActive(true);
-                    // Could add scale punch animation here
-                }
             }
         }
     }
     
     public void Hide()
     {
+        StopAllCoroutines();
         if (panel != null)
             panel.SetActive(false);
+    }
+    
+    private void OnDoubleReward()
+    {
+        if (hasDoubled || AdManager.Instance == null) return;
+        
+        AdManager.Instance.ShowDoubleRewardAd(() =>
+        {
+            hasDoubled = true;
+            
+            // Grant bonus coins (same amount again = total 2×)
+            SaveSystem.AddCoins(coinsEarned);
+            
+            // Update display
+            if (coinsEarnedText != null)
+                coinsEarnedText.text = $"+{coinsEarned * 2} 🪙 (2×!)";
+            
+            // Disable the button
+            if (doubleRewardButton != null)
+                doubleRewardButton.interactable = false;
+            
+            if (doubleRewardBadge != null)
+                doubleRewardBadge.SetActive(false);
+            
+            Debug.Log($"<color=green>Double reward! +{coinsEarned} bonus coins (total: {coinsEarned * 2})</color>");
+        });
     }
     
     private void OnNextLevel()
@@ -120,16 +165,13 @@ public class LevelCompleteUI : MonoBehaviour
     {
         Hide();
         if (GameManager.Instance != null)
-        {
-            int currentLevel = GameManager.Instance.SelectedLevel;
-            GameManager.Instance.ReplayLevel(currentLevel);
-        }
+            GameManager.Instance.ReplayLevel();
     }
     
     private void OnMenu()
     {
         Hide();
         if (GameManager.Instance != null)
-            GameManager.Instance.LoadLevelSelectScene();
+            GameManager.Instance.ShowLevelSelect();
     }
 }

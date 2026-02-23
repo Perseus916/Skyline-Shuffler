@@ -2,18 +2,43 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.InputSystem;
 using System.Collections.Generic;
+using System.Linq;
+
+// ========================================
+// SAVE STATE DATA CLASSES
+// ========================================
+
+/// <summary>
+/// Serializable snapshot of a single stack's floors
+/// </summary>
+[System.Serializable]
+public class StackStateData
+{
+    public int stackIndex;
+    public List<string> floorStyleNames = new(); // buildingName of each floor, bottom to top
+}
+
+/// <summary>
+/// Serializable snapshot of the entire level's current state
+/// </summary>
+[System.Serializable]
+public class LevelStateData
+{
+    public int levelNumber;
+    public int moveCount;
+    public List<StackStateData> stacks = new();
+}
 
 /// <summary>
 /// Central gameplay controller for City Sort.
-/// Handles stack selection, floor movement, and win detection.
-/// Differentiates taps from swipes to avoid conflict with camera rotation.
+/// Handles stack selection, floor movement, win detection, and auto-save.
 /// </summary>
 public class GameplayManager : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private LevelLoader levelLoader;
     [SerializeField] private Camera mainCamera;
-    [SerializeField] private LevelCompleteUI levelCompleteUI;
+    [SerializeField] private OutOfMovesUI outOfMovesUI;
     
     [Header("Settings")]
     [SerializeField] private LayerMask stackLayerMask;
@@ -33,6 +58,9 @@ public class GameplayManager : MonoBehaviour
     public UnityEvent<int, int> OnMoveCountChanged; // (current, limit)
     public UnityEvent OnLevelComplete;
     public UnityEvent OnMoveFailed;
+    public UnityEvent<int> OnUndoCountChanged;  // remaining undos
+    public UnityEvent<int> OnHintCountChanged;  // remaining hints
+    public UnityEvent<int> OnCoinsChanged;      // total coins
     
     // State
     private BuildingStack selectedStack;
@@ -54,6 +82,18 @@ public class GameplayManager : MonoBehaviour
     // Cached
     private List<BuildingStack> allStacks = new();
     
+    // Undo stack
+    private struct UndoRecord
+    {
+        public int fromIndex; // index into allStacks
+        public int toIndex;
+    }
+    private Stack<UndoRecord> undoStack = new();
+    
+    // Hint system
+    private List<MoveStep> solutionSteps;
+    private int nextHintIndex;
+    
     private void Start()
     {
         if (mainCamera == null)
@@ -61,9 +101,10 @@ public class GameplayManager : MonoBehaviour
     }
     
     /// <summary>
-    /// Initialize gameplay for a level. Call after LevelLoader.LoadLevel()
+    /// Initialize gameplay for a level (fresh start).
+    /// Called by LevelLoader after spawning all objects.
     /// </summary>
-    public void InitializeLevel(LevelDataSO levelData, List<BuildingStack> stacks, int maxStackHeight)
+    public void InitializeLevel(LevelDataSO levelData, List<BuildingStack> stacks, int maxStackHeight, int levelNumber)
     {
         allStacks = stacks;
         moveCount = 0;
@@ -73,25 +114,57 @@ public class GameplayManager : MonoBehaviour
         selectedStack = null;
         isPressing = false;
         
-        // Store level info for completion
-        currentLevelNumber = ExtractLevelNumber(levelData.name);
+        currentLevelNumber = levelNumber;
         optimalMoves = levelData.optimalMoves;
         
-        OnMoveCountChanged?.Invoke(moveCount, moveLimit);
+        // Undo/Hint reset
+        undoStack.Clear();
+        solutionSteps = levelData.solvingSteps != null ? new List<MoveStep>(levelData.solvingSteps) : new();
+        nextHintIndex = 0;
         
-        Debug.Log($"<color=cyan>Level {currentLevelNumber} initialized. Optimal: {optimalMoves}, Limit: {moveLimit}</color>");
+        OnMoveCountChanged?.Invoke(moveCount, moveLimit);
+        OnUndoCountChanged?.Invoke(SaveSystem.GetFreeUndos());
+        OnHintCountChanged?.Invoke(SaveSystem.GetFreeHints());
+        OnCoinsChanged?.Invoke(SaveSystem.GetCoins());
+        
+        // Save initial state
+        SaveInProgressState();
+        
+        Debug.Log($"<color=cyan>Level {currentLevelNumber} initialized. Optimal: {optimalMoves}, Limit: {moveLimit}, Stacks: {allStacks.Count}</color>");
     }
     
-    private int ExtractLevelNumber(string levelName)
+    /// <summary>
+    /// Restore gameplay from a saved in-progress state.
+    /// Called after LevelLoader spawns the default level layout.
+    /// </summary>
+    public void RestoreFromSave(LevelDataSO levelData, List<BuildingStack> stacks, int maxStackHeight, 
+                                 int levelNumber, LevelStateData savedState)
     {
-        // Try to extract number from "Level_001" format
-        if (levelName.Contains("_"))
-        {
-            string[] parts = levelName.Split('_');
-            if (parts.Length >= 2 && int.TryParse(parts[1], out int num))
-                return num;
-        }
-        return GameManager.Instance != null ? GameManager.Instance.SelectedLevel : 1;
+        allStacks = stacks;
+        moveCount = savedState.moveCount;
+        moveLimit = levelData.playerMoveLimit;
+        stackHeight = maxStackHeight;
+        levelComplete = false;
+        selectedStack = null;
+        isPressing = false;
+        
+        currentLevelNumber = levelNumber;
+        optimalMoves = levelData.optimalMoves;
+        
+        // Undo/Hint reset (can't undo moves from before save)
+        undoStack.Clear();
+        solutionSteps = levelData.solvingSteps != null ? new List<MoveStep>(levelData.solvingSteps) : new();
+        nextHintIndex = 0;
+        
+        // Rearrange floors to match saved state
+        RearrangeStacksFromState(savedState);
+        
+        OnMoveCountChanged?.Invoke(moveCount, moveLimit);
+        OnUndoCountChanged?.Invoke(SaveSystem.GetFreeUndos());
+        OnHintCountChanged?.Invoke(SaveSystem.GetFreeHints());
+        OnCoinsChanged?.Invoke(SaveSystem.GetCoins());
+        
+        Debug.Log($"<color=green>Level {currentLevelNumber} RESTORED at move {moveCount}/{moveLimit}</color>");
     }
     
     private void Update()
@@ -197,11 +270,15 @@ public class GameplayManager : MonoBehaviour
         // Case 1: Nothing selected - try to select this stack
         if (selectedStack == null)
         {
-            if (tappedStack.FloorCount > 0)
+            // Can't select empty stacks, ground-only stacks, or completed stacks
+            if (tappedStack.MovableFloorCount > 0 && !tappedStack.IsCompleted)
             {
                 SelectStack(tappedStack);
             }
-            // Can't select empty stack (no floors to move)
+            else if (tappedStack.IsCompleted)
+            {
+                Debug.Log("<color=gray>Stack is complete — can't take floors</color>");
+            }
             return;
         }
         
@@ -235,28 +312,46 @@ public class GameplayManager : MonoBehaviour
     
     private void TryMoveFloor(BuildingStack from, BuildingStack to)
     {
-        // Validation 1: Source has floors
-        if (from.FloorCount == 0)
+        // Validation 1: Source has movable floors
+        if (from.MovableFloorCount == 0)
         {
             ShowError(from);
             return;
         }
         
-        // Validation 2: Target has room
-        if (!to.CanReceiveFloor(stackHeight))
+        // Validation 2: Move limit not exceeded
+        if (moveCount >= moveLimit)
+        {
+            DeselectStack();
+            
+            // Show out-of-moves popup instead of just erroring
+            if (outOfMovesUI != null)
+            {
+                outOfMovesUI.Show(this);
+            }
+            else
+            {
+                ShowError(from);
+                OnMoveFailed?.Invoke();
+            }
+            Debug.Log("<color=red>Move limit reached! Showing recovery options.</color>");
+            return;
+        }
+        
+        // Validation 3: Target can receive this floor type
+        BuildingStyleSO movingStyle = from.GetTopFloorStyle();
+        if (!to.CanReceiveFloor(stackHeight, movingStyle))
         {
             ShowError(to);
             OnMoveFailed?.Invoke();
-            Debug.Log("<color=red>Target stack full!</color>");
-            return;
-        }
-        
-        // Validation 3: Move limit not exceeded
-        if (moveCount >= moveLimit)
-        {
-            ShowError(from);
-            OnMoveFailed?.Invoke();
-            Debug.Log("<color=red>Move limit reached!</color>");
+            
+            if (to.IsCompleted)
+                Debug.Log("<color=red>Can't place on completed stack!</color>");
+            else if (to.GetTopFloorStyle() != null && to.GetTopFloorStyle() != movingStyle)
+                Debug.Log($"<color=red>Wrong type! Top is {to.GetTopFloorStyle().buildingName}, placing {movingStyle.buildingName}</color>");
+            else
+                Debug.Log($"<color=red>Stack full! {to.FloorCount}/{stackHeight}</color>");
+            
             return;
         }
         
@@ -266,6 +361,11 @@ public class GameplayManager : MonoBehaviour
     
     private void ExecuteMove(BuildingStack from, BuildingStack to)
     {
+        // Record undo
+        int fromIdx = allStacks.IndexOf(from);
+        int toIdx = allStacks.IndexOf(to);
+        undoStack.Push(new UndoRecord { fromIndex = fromIdx, toIndex = toIdx });
+        
         // Get floor data from source
         var floorData = from.RemoveTopFloor();
         if (floorData.floorObject == null) return;
@@ -275,6 +375,7 @@ public class GameplayManager : MonoBehaviour
         
         // Add to target (handles positioning)
         to.AddFloor(floorData.floorObject, floorData.style, animationDuration);
+        if (AudioManager.Instance != null) AudioManager.Instance.PlayFloorPlace();
         
         // Update move counter
         moveCount++;
@@ -282,14 +383,17 @@ public class GameplayManager : MonoBehaviour
         
         Debug.Log($"<color=cyan>Move {moveCount}/{moveLimit}</color>");
         
+        // Auto-save after every move
+        SaveInProgressState();
+        
         // Check win condition
         CheckWinCondition();
     }
     
     private void ShowError(BuildingStack stack)
     {
-        // Brief red flash
         stack.FlashColor(errorColor, 0.2f);
+        if (AudioManager.Instance != null) AudioManager.Instance.PlayMoveFailed();
     }
     
     private void CheckWinCondition()
@@ -303,23 +407,102 @@ public class GameplayManager : MonoBehaviour
         // All stacks complete!
         levelComplete = true;
         OnLevelComplete?.Invoke();
+        if (AudioManager.Instance != null) AudioManager.Instance.PlayLevelComplete();
         
         Debug.Log($"<color=green>🎉 Level Complete in {moveCount} moves!</color>");
         
-        // Save progress to GameManager
+        // Notify GameManager (handles save + UI)
         if (GameManager.Instance != null)
         {
             GameManager.Instance.OnLevelComplete(currentLevelNumber, moveCount, optimalMoves);
         }
-        
-        // Show UI
-        if (levelCompleteUI != null)
+    }
+    
+    // ========================================
+    // SAVE / RESTORE STATE
+    // ========================================
+    
+    /// <summary>
+    /// Capture current stack state and save to PlayerPrefs.
+    /// Called after every move for seamless resume.
+    /// </summary>
+    private void SaveInProgressState()
+    {
+        LevelStateData state = new LevelStateData
         {
-            int stars = GameManager.Instance != null 
-                ? GameManager.Instance.CalculateStars(moveCount, optimalMoves)
-                : (moveCount <= optimalMoves ? 3 : moveCount <= optimalMoves * 1.5f ? 2 : 1);
-            levelCompleteUI.Show(currentLevelNumber, moveCount, optimalMoves, stars);
+            levelNumber = currentLevelNumber,
+            moveCount = moveCount
+        };
+        
+        for (int i = 0; i < allStacks.Count; i++)
+        {
+            StackStateData stackState = new StackStateData
+            {
+                stackIndex = i,
+                floorStyleNames = allStacks[i].GetFloorStyleNames()
+            };
+            state.stacks.Add(stackState);
         }
+        
+        string json = JsonUtility.ToJson(state);
+        SaveSystem.SaveInProgressGame(currentLevelNumber, json, moveCount);
+    }
+    
+    /// <summary>
+    /// Rearrange floor GameObjects to match a saved state.
+    /// Steps: remove all movable floors from stacks, then redistribute.
+    /// </summary>
+    private void RearrangeStacksFromState(LevelStateData savedState)
+    {
+        // 1. Collect all movable floors from all stacks
+        List<(GameObject obj, BuildingStyleSO style)> allFloors = new();
+        
+        foreach (var stack in allStacks)
+        {
+            while (stack.MovableFloorCount > 0)
+            {
+                var floor = stack.RemoveTopFloor();
+                if (floor.floorObject != null)
+                    allFloors.Add(floor);
+            }
+        }
+        
+        // 2. Build a lookup: styleName → list of floor objects
+        Dictionary<string, Queue<(GameObject obj, BuildingStyleSO style)>> floorPool = new();
+        foreach (var floor in allFloors)
+        {
+            string key = floor.style.buildingName;
+            if (!floorPool.ContainsKey(key))
+                floorPool[key] = new Queue<(GameObject, BuildingStyleSO)>();
+            floorPool[key].Enqueue(floor);
+        }
+        
+        // 3. Redistribute floors according to saved state
+        for (int i = 0; i < savedState.stacks.Count && i < allStacks.Count; i++)
+        {
+            var stackState = savedState.stacks[i];
+            var stack = allStacks[stackState.stackIndex < allStacks.Count ? stackState.stackIndex : i];
+            
+            // Skip ground floor entries (they're already in place)
+            int groundCount = stack.GroundFloorCount;
+            
+            for (int f = groundCount; f < stackState.floorStyleNames.Count; f++)
+            {
+                string styleName = stackState.floorStyleNames[f];
+                
+                if (floorPool.ContainsKey(styleName) && floorPool[styleName].Count > 0)
+                {
+                    var floor = floorPool[styleName].Dequeue();
+                    stack.AddFloor(floor.obj, floor.style, 0f); // instant, no animation
+                }
+                else
+                {
+                    Debug.LogWarning($"Missing floor for style '{styleName}' during restore!");
+                }
+            }
+        }
+        
+        Debug.Log($"<color=green>Restored {allFloors.Count} floors from saved state</color>");
     }
     
     // ========================================
@@ -331,11 +514,163 @@ public class GameplayManager : MonoBehaviour
     public bool IsLevelComplete() => levelComplete;
     
     /// <summary>
+    /// Add extra moves (from ad reward or coin purchase).
+    /// Called by OutOfMovesUI.
+    /// </summary>
+    public void AddExtraMoves(int count)
+    {
+        moveLimit += count;
+        OnMoveCountChanged?.Invoke(moveCount, moveLimit);
+        SaveInProgressState();
+        Debug.Log($"<color=green>+{count} extra moves! New limit: {moveLimit}</color>");
+    }
+    
+    /// <summary>
     /// Check if player earned perfect clear (solved in optimal moves + bonus range)
     /// </summary>
     public bool IsPerfectClear(int optimalMoves)
     {
         return moveCount <= optimalMoves + 2;
     }
+    
+    // ========================================
+    // UNDO SYSTEM
+    // ========================================
+    
+    /// <summary>
+    /// Undo the last move. Costs one free undo or 50 coins.
+    /// </summary>
+    public bool TryUndo()
+    {
+        if (levelComplete || undoStack.Count == 0) return false;
+        
+        // Check consumable availability
+        bool hasFree = SaveSystem.UseFreeUndo();
+        if (!hasFree)
+        {
+            // Try spending coins
+            if (!SaveSystem.SpendCoins(75))
+            {
+                // Offer ad as last resort
+                if (AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady())
+                {
+                    AdManager.Instance.ShowFreeUndosAd(() =>
+                    {
+                        SaveSystem.AddFreeUndos(3);
+                        OnUndoCountChanged?.Invoke(SaveSystem.GetFreeUndos());
+                        // Now execute the undo since player earned it
+                        TryUndo();
+                    });
+                }
+                else
+                {
+                    Debug.Log("<color=red>No undos available! No free undos, coins, or ads.</color>");
+                }
+                return false;
+            }
+            OnCoinsChanged?.Invoke(SaveSystem.GetCoins());
+        }
+        
+        // Pop last move
+        var record = undoStack.Pop();
+        BuildingStack from = allStacks[record.toIndex];  // The floor is now here
+        BuildingStack to = allStacks[record.fromIndex];    // Move it back here
+        
+        // Execute reverse move (instant, no animation delay)
+        var floorData = from.RemoveTopFloor();
+        if (floorData.floorObject != null)
+        {
+            to.AddFloor(floorData.floorObject, floorData.style, 0.15f);
+        }
+        
+        // Decrement move count
+        moveCount = Mathf.Max(0, moveCount - 1);
+        OnMoveCountChanged?.Invoke(moveCount, moveLimit);
+        OnUndoCountChanged?.Invoke(SaveSystem.GetFreeUndos());
+        
+        DeselectStack();
+        SaveInProgressState();
+        
+        Debug.Log($"<color=yellow>Undo! Move count: {moveCount}/{moveLimit} | Undos left: {SaveSystem.GetFreeUndos()}</color>");
+        return true;
+    }
+    
+    // ========================================
+    // HINT SYSTEM
+    // ========================================
+    
+    /// <summary>
+    /// Show a hint by highlighting the source and target stacks.
+    /// Costs one free hint or 100 coins.
+    /// </summary>
+    public bool TryShowHint()
+    {
+        if (levelComplete) return false;
+        
+        // Find a valid hint from current state
+        BuildingStack hintFrom = null;
+        BuildingStack hintTo = null;
+        
+        foreach (var from in allStacks)
+        {
+            if (from.MovableFloorCount == 0) continue;
+            
+            var topStyle = from.GetTopFloorStyle();
+            if (topStyle == null) continue;
+            
+            foreach (var to in allStacks)
+            {
+                if (to == from) continue;
+                if (!to.CanReceiveFloor(stackHeight, topStyle)) continue;
+                
+                hintFrom = from;
+                hintTo = to;
+                
+                // Prefer targets that already have matching floors
+                if (to.MovableFloorCount > 0)
+                    goto FoundHint;
+            }
+        }
+        
+        FoundHint:
+        if (hintFrom == null || hintTo == null)
+        {
+            Debug.Log("<color=red>No valid hint available!</color>");
+            return false;
+        }
+        
+        // Check consumable availability
+        bool hasFree = SaveSystem.UseFreeHint();
+        if (!hasFree)
+        {
+            if (!SaveSystem.SpendCoins(150))
+            {
+                // Offer ad as last resort
+                if (AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady())
+                {
+                    AdManager.Instance.ShowFreeHintAd(() =>
+                    {
+                        SaveSystem.AddFreeHints(1);
+                        OnHintCountChanged?.Invoke(SaveSystem.GetFreeHints());
+                        TryShowHint();
+                    });
+                }
+                else
+                {
+                    Debug.Log("<color=red>No hints available! No free hints, coins, or ads.</color>");
+                }
+                return false;
+            }
+            OnCoinsChanged?.Invoke(SaveSystem.GetCoins());
+        }
+        
+        // Highlight the hint stacks
+        hintFrom.FlashColor(new Color(0.3f, 1f, 0.3f, 1f), 1.0f); // Green flash on source
+        hintTo.FlashColor(new Color(0.3f, 0.7f, 1f, 1f), 1.0f);   // Blue flash on target
+        
+        OnHintCountChanged?.Invoke(SaveSystem.GetFreeHints());
+        
+        Debug.Log($"<color=green>Hint: Move from stack {allStacks.IndexOf(hintFrom)} to {allStacks.IndexOf(hintTo)}</color>");
+        return true;
+    }
 }
-

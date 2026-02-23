@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Simple settings panel for basic options.
+/// Settings panel UI. Works with GameManager for toggle visibility.
 /// </summary>
 public class SettingsUI : MonoBehaviour
 {
@@ -18,99 +18,63 @@ public class SettingsUI : MonoBehaviour
     [SerializeField] private Button resetProgressButton;
     [SerializeField] private Button closeButton;
     
-    [Header("Confirmation")]
+    [Header("Reset Confirmation")]
     [SerializeField] private GameObject resetConfirmPanel;
     [SerializeField] private Button confirmResetButton;
     [SerializeField] private Button cancelResetButton;
     
-    private void Start()
+    private void OnEnable()
     {
-        SetupUI();
-        LoadSettings();
-    }
-    
-    private void SetupUI()
-    {
-        musicSlider?.onValueChanged.AddListener(OnMusicChanged);
-        sfxSlider?.onValueChanged.AddListener(OnSFXChanged);
-        vibrationToggle?.onValueChanged.AddListener(OnVibrationChanged);
-        
-        resetProgressButton?.onClick.AddListener(ShowResetConfirm);
-        closeButton?.onClick.AddListener(Close);
-        
-        confirmResetButton?.onClick.AddListener(ConfirmReset);
-        cancelResetButton?.onClick.AddListener(HideResetConfirm);
+        SetupListeners();
+        LoadValues();
         
         if (resetConfirmPanel != null)
             resetConfirmPanel.SetActive(false);
     }
     
-    private void LoadSettings()
+    private void SetupListeners()
     {
-        if (GameManager.Instance != null)
-        {
-            if (musicSlider != null)
-                musicSlider.value = GameManager.Instance.MusicVolume;
-            
-            if (sfxSlider != null)
-                sfxSlider.value = GameManager.Instance.SFXVolume;
-            
-            if (vibrationToggle != null)
-                vibrationToggle.isOn = GameManager.Instance.VibrationEnabled;
-        }
+        musicSlider?.onValueChanged.RemoveAllListeners();
+        sfxSlider?.onValueChanged.RemoveAllListeners();
+        vibrationToggle?.onValueChanged.RemoveAllListeners();
+        resetProgressButton?.onClick.RemoveAllListeners();
+        closeButton?.onClick.RemoveAllListeners();
+        confirmResetButton?.onClick.RemoveAllListeners();
+        cancelResetButton?.onClick.RemoveAllListeners();
+        
+        musicSlider?.onValueChanged.AddListener(v => { if (GameManager.Instance) GameManager.Instance.MusicVolume = v; });
+        sfxSlider?.onValueChanged.AddListener(v => { if (GameManager.Instance) GameManager.Instance.SFXVolume = v; });
+        vibrationToggle?.onValueChanged.AddListener(v => { if (GameManager.Instance) GameManager.Instance.VibrationEnabled = v; });
+        
+        resetProgressButton?.onClick.AddListener(() => { if (resetConfirmPanel) resetConfirmPanel.SetActive(true); });
+        cancelResetButton?.onClick.AddListener(() => { if (resetConfirmPanel) resetConfirmPanel.SetActive(false); });
+        confirmResetButton?.onClick.AddListener(ConfirmReset);
+        closeButton?.onClick.AddListener(Close);
     }
     
-    public void Open()
+    private void LoadValues()
     {
-        if (panel != null)
-            panel.SetActive(true);
-        LoadSettings();
+        if (GameManager.Instance == null) return;
+        
+        if (musicSlider != null) musicSlider.SetValueWithoutNotify(GameManager.Instance.MusicVolume);
+        if (sfxSlider != null) sfxSlider.SetValueWithoutNotify(GameManager.Instance.SFXVolume);
+        if (vibrationToggle != null) vibrationToggle.SetIsOnWithoutNotify(GameManager.Instance.VibrationEnabled);
     }
     
     public void Close()
     {
-        if (panel != null)
-            panel.SetActive(false);
-    }
-    
-    private void OnMusicChanged(float value)
-    {
         if (GameManager.Instance != null)
-            GameManager.Instance.MusicVolume = value;
-    }
-    
-    private void OnSFXChanged(float value)
-    {
-        if (GameManager.Instance != null)
-            GameManager.Instance.SFXVolume = value;
-    }
-    
-    private void OnVibrationChanged(bool value)
-    {
-        if (GameManager.Instance != null)
-            GameManager.Instance.VibrationEnabled = value;
-    }
-    
-    private void ShowResetConfirm()
-    {
-        if (resetConfirmPanel != null)
-            resetConfirmPanel.SetActive(true);
-    }
-    
-    private void HideResetConfirm()
-    {
-        if (resetConfirmPanel != null)
-            resetConfirmPanel.SetActive(false);
+            GameManager.Instance.HideSettings();
     }
     
     private void ConfirmReset()
     {
         SaveSystem.ResetAllProgress();
-        HideResetConfirm();
-        Debug.Log("<color=yellow>All progress has been reset!</color>");
+        if (resetConfirmPanel != null) resetConfirmPanel.SetActive(false);
+        Debug.Log("<color=yellow>Progress reset!</color>");
         
-        // Reload current scene to refresh UI
+        // Go home
         if (GameManager.Instance != null)
-            GameManager.Instance.LoadHomeScene();
+            GameManager.Instance.ShowHomeScreen();
     }
 }

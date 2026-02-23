@@ -5,8 +5,6 @@ public class LevelLoader : MonoBehaviour
 {
     [Header("Level Data")]
     public LevelDataSO currentLevelData;
-    [SerializeField] private LevelRegistrySO levelRegistry;
-    [SerializeField] private bool autoLoadOnStart = true;
 
     [Header("Prefabs")]
     public GameObject cranePrefab;
@@ -19,55 +17,27 @@ public class LevelLoader : MonoBehaviour
     [Header("Gameplay")]
     [SerializeField] private GameplayManager gameplayManager;
 
-    [Header("Hierarchy Containers")]
-    public Transform gridContainer; // Keep foundations here
-    public Transform cityContainer; // Keep buildings here to avoid scale issues
+    [Header("Hierarchy")]
+    public Transform gridContainer; // All foundations + crane spawn here
 
-    // Internal tracking for gameplay logic
+    // Internal tracking
     private List<BuildingStack> activeStacks = new List<BuildingStack>();
     private int currentStackHeight;
     
-    private void Start()
-    {
-        if (autoLoadOnStart)
-        {
-            // Get level from GameManager if available
-            if (GameManager.Instance != null && levelRegistry != null)
-            {
-                int levelNumber = GameManager.Instance.SelectedLevel;
-                LoadLevelByNumber(levelNumber);
-            }
-            else if (currentLevelData != null)
-            {
-                // Fallback to assigned level
-                LoadLevel();
-            }
-        }
-    }
-    
     /// <summary>
-    /// Load a specific level by number
+    /// Load a level from a specific LevelDataSO (called by GameManager)
     /// </summary>
-    public void LoadLevelByNumber(int levelNumber)
+    public void LoadLevel(LevelDataSO levelData, int levelNumber)
     {
-        if (levelRegistry == null)
-        {
-            Debug.LogError("No LevelRegistry assigned!");
-            return;
-        }
-        
-        LevelDataSO levelData = levelRegistry.GetLevel(levelNumber);
-        if (levelData != null)
-        {
-            currentLevelData = levelData;
-            LoadLevel();
-        }
+        currentLevelData = levelData;
+        LoadLevel(levelNumber);
     }
 
     /// <summary>
-    /// Call this to build the level from the ScriptableObject
+    /// Build the level from the current ScriptableObject.
+    /// levelNumber is passed explicitly so GameplayManager knows which level this is.
     /// </summary>
-    public void LoadLevel()
+    public void LoadLevel(int levelNumber = -1)
     {
         if (currentLevelData == null)
         {
@@ -79,37 +49,75 @@ public class LevelLoader : MonoBehaviour
 
         float offset = (currentLevelData.gridDimension - 1) * gridSpacing * 0.5f;
         
-        // Determine stack height from level data or config
         currentStackHeight = GetStackHeightFromLevel(currentLevelData);
 
-        // 1. Spawn Crane at stored grid position
+        // 1. Spawn Crane
         SpawnCrane(currentLevelData.craneGridPos, offset);
 
-        // 2. Iterate through slot data to build the city
+        // 2. Build the city
         foreach (SlotData slot in currentLevelData.slots)
         {
             SpawnSlot(slot, offset);
         }
 
-        Debug.Log($"Level {currentLevelData.levelNumber} Loaded Successfully. Stacks: {activeStacks.Count}");
+        // Use explicit level number, fallback to data or GameManager
+        int resolvedLevel = levelNumber > 0 
+            ? levelNumber 
+            : (currentLevelData.levelNumber > 0 
+                ? currentLevelData.levelNumber 
+                : (GameManager.Instance != null ? GameManager.Instance.SelectedLevel : 1));
+
+        Debug.Log($"Level {resolvedLevel} Loaded. Stacks: {activeStacks.Count}");
         
-        // 3. Initialize gameplay manager if present
+        // 3. Initialize gameplay
         if (gameplayManager != null)
         {
-            gameplayManager.InitializeLevel(currentLevelData, activeStacks, currentStackHeight);
+            gameplayManager.InitializeLevel(currentLevelData, activeStacks, currentStackHeight, resolvedLevel);
         }
+    }
+    
+    /// <summary>
+    /// Load level layout then restore floor positions from saved state.
+    /// Called by GameManager when resuming an in-progress game.
+    /// </summary>
+    public void LoadLevelWithRestore(LevelDataSO levelData, int levelNumber, LevelStateData savedState)
+    {
+        currentLevelData = levelData;
+        
+        ClearCurrentLevel();
+
+        float offset = (currentLevelData.gridDimension - 1) * gridSpacing * 0.5f;
+        
+        currentStackHeight = GetStackHeightFromLevel(currentLevelData);
+
+        // 1. Spawn Crane
+        SpawnCrane(currentLevelData.craneGridPos, offset);
+
+        // 2. Build the city (default layout — will be rearranged)
+        foreach (SlotData slot in currentLevelData.slots)
+        {
+            SpawnSlot(slot, offset);
+        }
+        
+        // 3. Restore from saved state (rearranges floors)
+        if (gameplayManager != null)
+        {
+            gameplayManager.RestoreFromSave(currentLevelData, activeStacks, currentStackHeight, levelNumber, savedState);
+        }
+        
+        Debug.Log($"<color=green>Level {levelNumber} loaded with saved state restore</color>");
     }
     
     private int GetStackHeightFromLevel(LevelDataSO level)
     {
-        // Find the tallest stack in the level data
-        int maxHeight = 3; // Default minimum
+        // Total capacity = ground floor + movable floors
+        int maxHeight = 3;
         foreach (var slot in level.slots)
         {
             if (!slot.isLocked && slot.floorStyles != null)
             {
                 int totalFloors = slot.floorStyles.Count;
-                if (slot.buildingStyle != null) totalFloors++; // Ground floor
+                if (slot.buildingStyle != null) totalFloors++; // ground floor counts now
                 maxHeight = Mathf.Max(maxHeight, totalFloors);
             }
         }
@@ -153,12 +161,12 @@ public class LevelLoader : MonoBehaviour
             if (data.floorStyles != null && data.floorStyles.Count > 0)
             {
                 // Has floors to display
-                stack.InitializeFromData(data, cityContainer, floorHeight);
+                stack.InitializeFromData(data, floorHeight);
             }
             else
             {
                 // Empty slot - initialize with no floors but same style target
-                stack.InitializeFromData(data, cityContainer, floorHeight);
+                stack.InitializeFromData(data, floorHeight);
                 ApplyEmptySlotVisuals(foundation);
             }
             
@@ -198,16 +206,9 @@ public class LevelLoader : MonoBehaviour
     {
         activeStacks.Clear();
 
-        // Destroy children in grid container
         if (gridContainer != null)
         {
             foreach (Transform child in gridContainer) Destroy(child.gameObject);
-        }
-
-        // Destroy children in city container
-        if (cityContainer != null)
-        {
-            foreach (Transform child in cityContainer) Destroy(child.gameObject);
         }
     }
     

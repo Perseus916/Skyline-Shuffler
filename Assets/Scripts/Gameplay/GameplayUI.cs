@@ -3,43 +3,78 @@ using UnityEngine.UI;
 using TMPro;
 
 /// <summary>
-/// Simple gameplay UI for move counter and level complete display.
-/// Connect to GameplayManager events.
+/// In-game HUD: move counter, level number, coins, undo/hint buttons with ad fallback.
+/// Shows free count → coin cost → ad icon as player exhausts options.
 /// </summary>
 public class GameplayUI : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private GameplayManager gameplayManager;
     
-    [Header("Move Counter")]
+    [Header("HUD")]
     [SerializeField] private TextMeshProUGUI moveCountText;
+    [SerializeField] private TextMeshProUGUI levelNumberText;
+    [SerializeField] private TextMeshProUGUI coinText;
     [SerializeField] private string moveFormat = "{0} / {1}";
     
-    [Header("Level Complete Panel")]
-    [SerializeField] private GameObject levelCompletePanel;
-    [SerializeField] private TextMeshProUGUI completeMoveCountText;
-    [SerializeField] private GameObject perfectClearBadge;
+    [Header("Buttons")]
+    [SerializeField] private Button pauseButton;
+    [SerializeField] private Button homeButton;
+    [SerializeField] private Button undoButton;
+    [SerializeField] private Button hintButton;
     
-    private void Start()
+    [Header("Undo/Hint Labels")]
+    [SerializeField] private TextMeshProUGUI undoCountText;
+    [SerializeField] private TextMeshProUGUI hintCountText;
+    
+    [Header("Ad Indicators")]
+    [SerializeField] private GameObject undoAdIcon;  // Small video icon shown when free = 0
+    [SerializeField] private GameObject hintAdIcon;
+    
+    // Costs (must match GameplayManager)
+    private const int UNDO_COIN_COST = 75;
+    private const int HINT_COIN_COST = 150;
+    
+    private void OnEnable()
     {
-        // Subscribe to events
         if (gameplayManager != null)
         {
             gameplayManager.OnMoveCountChanged.AddListener(UpdateMoveCounter);
-            gameplayManager.OnLevelComplete.AddListener(ShowLevelComplete);
+            gameplayManager.OnUndoCountChanged.AddListener(UpdateUndoCount);
+            gameplayManager.OnHintCountChanged.AddListener(UpdateHintCount);
+            gameplayManager.OnCoinsChanged.AddListener(UpdateCoins);
         }
         
-        // Hide complete panel on start
-        if (levelCompletePanel != null)
-            levelCompletePanel.SetActive(false);
+        pauseButton?.onClick.RemoveAllListeners();
+        homeButton?.onClick.RemoveAllListeners();
+        undoButton?.onClick.RemoveAllListeners();
+        hintButton?.onClick.RemoveAllListeners();
+        
+        pauseButton?.onClick.AddListener(OnPauseClicked);
+        homeButton?.onClick.AddListener(OnHomeClicked);
+        undoButton?.onClick.AddListener(OnUndoClicked);
+        hintButton?.onClick.AddListener(OnHintClicked);
+        
+        // Show level number
+        if (levelNumberText != null && GameManager.Instance != null)
+        {
+            levelNumberText.text = $"Level {GameManager.Instance.SelectedLevel}";
+        }
+        
+        // Show initial values
+        UpdateCoins(SaveSystem.GetCoins());
+        UpdateUndoCount(SaveSystem.GetFreeUndos());
+        UpdateHintCount(SaveSystem.GetFreeHints());
     }
     
-    private void OnDestroy()
+    private void OnDisable()
     {
         if (gameplayManager != null)
         {
             gameplayManager.OnMoveCountChanged.RemoveListener(UpdateMoveCounter);
-            gameplayManager.OnLevelComplete.RemoveListener(ShowLevelComplete);
+            gameplayManager.OnUndoCountChanged.RemoveListener(UpdateUndoCount);
+            gameplayManager.OnHintCountChanged.RemoveListener(UpdateHintCount);
+            gameplayManager.OnCoinsChanged.RemoveListener(UpdateCoins);
         }
     }
     
@@ -49,58 +84,93 @@ public class GameplayUI : MonoBehaviour
         {
             moveCountText.text = string.Format(moveFormat, current, limit);
             
-            // Change color when approaching limit
             float ratio = (float)current / limit;
             if (ratio > 0.9f)
                 moveCountText.color = Color.red;
             else if (ratio > 0.7f)
-                moveCountText.color = new Color(1f, 0.6f, 0f); // Orange
+                moveCountText.color = new Color(1f, 0.6f, 0f); // Orange warning
             else
                 moveCountText.color = Color.white;
         }
     }
     
-    private void ShowLevelComplete()
+    private void UpdateUndoCount(int freeCount)
     {
-        if (levelCompletePanel != null)
+        bool hasFree = freeCount > 0;
+        bool hasCoins = SaveSystem.GetCoins() >= UNDO_COIN_COST;
+        bool hasAd = AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady();
+        
+        if (undoCountText != null)
         {
-            levelCompletePanel.SetActive(true);
-            
-            if (completeMoveCountText != null)
-            {
-                completeMoveCountText.text = $"Completed in {gameplayManager.GetMoveCount()} moves!";
-            }
-            
-            // Show perfect clear badge if applicable
-            if (perfectClearBadge != null)
-            {
-                // We'd need access to optimalMoves, could be added later
-                perfectClearBadge.SetActive(false);
-            }
+            if (hasFree)
+                undoCountText.text = freeCount.ToString();
+            else if (hasCoins)
+                undoCountText.text = $"{UNDO_COIN_COST}";
+            else if (hasAd)
+                undoCountText.text = "📺";
+            else
+                undoCountText.text = "—";
         }
+        
+        // Show/hide ad icon
+        if (undoAdIcon != null)
+            undoAdIcon.SetActive(!hasFree && !hasCoins && hasAd);
     }
     
-    /// <summary>
-    /// Call from Next Level button
-    /// </summary>
-    public void OnNextLevelClicked()
+    private void UpdateHintCount(int freeCount)
     {
-        // TODO: Load next level
-        Debug.Log("Next Level clicked - implement level progression");
+        bool hasFree = freeCount > 0;
+        bool hasCoins = SaveSystem.GetCoins() >= HINT_COIN_COST;
+        bool hasAd = AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady();
+        
+        if (hintCountText != null)
+        {
+            if (hasFree)
+                hintCountText.text = freeCount.ToString();
+            else if (hasCoins)
+                hintCountText.text = $"{HINT_COIN_COST}";
+            else if (hasAd)
+                hintCountText.text = "📺";
+            else
+                hintCountText.text = "—";
+        }
+        
+        // Show/hide ad icon
+        if (hintAdIcon != null)
+            hintAdIcon.SetActive(!hasFree && !hasCoins && hasAd);
     }
     
-    /// <summary>
-    /// Call from Retry button
-    /// </summary>
-    public void OnRetryClicked()
+    private void UpdateCoins(int total)
     {
-        // Reload current level
-        LevelLoader loader = FindObjectOfType<LevelLoader>();
-        if (loader != null)
-        {
-            loader.LoadLevel();
-            if (levelCompletePanel != null)
-                levelCompletePanel.SetActive(false);
-        }
+        if (coinText != null)
+            coinText.text = total.ToString();
+        
+        // Refresh undo/hint labels since coin count affects what's shown
+        UpdateUndoCount(SaveSystem.GetFreeUndos());
+        UpdateHintCount(SaveSystem.GetFreeHints());
+    }
+    
+    private void OnPauseClicked()
+    {
+        if (GameManager.Instance != null)
+            GameManager.Instance.ShowHomeScreen();
+    }
+    
+    private void OnHomeClicked()
+    {
+        if (GameManager.Instance != null)
+            GameManager.Instance.ShowHomeScreen();
+    }
+    
+    private void OnUndoClicked()
+    {
+        if (gameplayManager != null)
+            gameplayManager.TryUndo();
+    }
+    
+    private void OnHintClicked()
+    {
+        if (gameplayManager != null)
+            gameplayManager.TryShowHint();
     }
 }

@@ -3,23 +3,29 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Manages a building stack on a foundation.
-/// Handles floor spawning, selection visuals, and floor movement.
+/// Manages a building stack (foundation + floors).
+/// Ground and normal floors are all in one list.
+/// Ground floor cannot be lifted. Everything else follows sorting rules.
+/// Completion = FULL + all floors same type.
 /// </summary>
 public class BuildingStack : MonoBehaviour
 {
-    public BuildingStyleSO myStyle; // Goal style for completion
-    
-    // Floor tracking
+    // All floors in one unified list (ground at index 0 if present)
     private readonly List<GameObject> floors = new();
     private readonly List<BuildingStyleSO> floorStyleData = new();
-    private GameObject groundFloor;
+    
+    // Ground floor tracking (ground is in floors list but can't be removed)
+    private int groundFloorCount = 0; // 0 or 1
     
     // Positioning constants
     private const float FIRST_FLOOR_LOCAL_Y = 2.5f;
     private float localFloorSpacing;
     private Vector3 compensatedScale;
     private int maxStackHeight;
+    
+    // Completion state
+    private bool isCompleted;
+    public bool IsCompleted => isCompleted;
     
     // Selection state
     private bool isSelected;
@@ -29,21 +35,22 @@ public class BuildingStack : MonoBehaviour
     // Animation
     private Coroutine currentAnimation;
     
+    // ========================================
+    // INITIALIZATION
+    // ========================================
+    
     /// <summary>
-    /// Initialize stack from level data
+    /// Initialize stack from level data.
+    /// Ground floor goes into floors[0], movable floors after it.
     /// </summary>
-    public void InitializeFromData(SlotData data, Transform worldParent, float floorHeight)
+    public void InitializeFromData(SlotData data, float floorHeight)
     {
-        myStyle = data.buildingStyle;
-        
-        Debug.Log($"<color=cyan>Initializing stack at {data.gridPos}: style={myStyle?.buildingName}, floorStyles.Count={data.floorStyles?.Count ?? 0}</color>");
-        
         // Cache renderer for selection visuals
         foundationRenderer = GetComponent<Renderer>();
         if (foundationRenderer != null)
             originalColor = foundationRenderer.material.color;
         
-        // Get parent (foundation) scale to calculate floor spacing and compensate scale
+        // Calculate scale compensation
         Vector3 parentScale = transform.localScale;
         compensatedScale = new Vector3(
             1f / parentScale.x,
@@ -55,20 +62,24 @@ public class BuildingStack : MonoBehaviour
         
         int floorIndex = 0;
         
-        // 1. Spawn Ground Floor if we have a style assigned (immovable first floor)
-        if (myStyle != null && myStyle.groundPrefab != null)
+        // 1. Ground floor (goes into floors list at index 0, but can't be removed)
+        if (data.buildingStyle != null && data.buildingStyle.groundPrefab != null)
         {
             float localY = FIRST_FLOOR_LOCAL_Y + (floorIndex * localFloorSpacing);
             
-            groundFloor = Instantiate(myStyle.groundPrefab, Vector3.zero, Quaternion.identity, this.transform);
-            groundFloor.transform.localPosition = new Vector3(0, localY, 0);
-            groundFloor.transform.localScale = compensatedScale;
-            groundFloor.name = "GroundFloor";
+            GameObject ground = Instantiate(data.buildingStyle.groundPrefab, Vector3.zero, Quaternion.identity, this.transform);
+            ground.transform.localPosition = new Vector3(0, localY, 0);
+            ground.transform.localScale = compensatedScale;
+            ground.name = "GroundFloor";
+            
+            floors.Add(ground);
+            floorStyleData.Add(data.buildingStyle);
+            groundFloorCount = 1;
             
             floorIndex++;
         }
 
-        // 2. Spawn the movable floors stored in the Level Data
+        // 2. Movable floors
         if (data.floorStyles != null)
         {
             for (int i = 0; i < data.floorStyles.Count; i++)
@@ -88,11 +99,11 @@ public class BuildingStack : MonoBehaviour
             }
         }
         
-        Debug.Log($"<color=cyan>Stack initialized with {floors.Count} movable floors</color>");
+        Debug.Log($"<color=cyan>Stack initialized: {floors.Count} total floors ({groundFloorCount} ground, {MovableFloorCount} movable)</color>");
     }
     
     /// <summary>
-    /// Set the max stack height (needed for validation)
+    /// Set the max stack height (total floors including ground)
     /// </summary>
     public void SetMaxStackHeight(int height)
     {
@@ -103,23 +114,55 @@ public class BuildingStack : MonoBehaviour
     // GAMEPLAY API
     // ========================================
     
-    /// <summary>
-    /// Get the current movable floor count
-    /// </summary>
+    /// <summary>Total floor count (ground + movable)</summary>
     public int FloorCount => floors.Count;
     
+    /// <summary>Only movable floors (excludes ground)</summary>
+    public int MovableFloorCount => floors.Count - groundFloorCount;
+    
+    /// <summary>Number of ground floors (0 or 1)</summary>
+    public int GroundFloorCount => groundFloorCount;
+    
     /// <summary>
-    /// Check if stack can receive another floor
+    /// Get the buildingName of each floor for save state serialization.
+    /// Returns all floors bottom-to-top (ground first if present).
     /// </summary>
-    public bool CanReceiveFloor(int maxHeight)
+    public List<string> GetFloorStyleNames()
     {
-        int totalFloors = floors.Count;
-        if (groundFloor != null) totalFloors++;
-        return totalFloors < maxHeight;
+        List<string> names = new();
+        foreach (var style in floorStyleData)
+        {
+            names.Add(style != null ? style.buildingName : "");
+        }
+        return names;
     }
     
     /// <summary>
-    /// Get the style of the top floor
+    /// Check if stack can receive a floor of the given style.
+    /// Rules: not full, not completed, and top must match OR stack has no movable floors.
+    /// </summary>
+    public bool CanReceiveFloor(int maxHeight, BuildingStyleSO incomingStyle = null)
+    {
+        // Completed stacks are locked
+        if (isCompleted) return false;
+        
+        // Check total capacity (ground + movable)
+        if (floors.Count >= maxHeight) return false;
+        
+        // Same-type rule: check against TOP floor only
+        // If stack only has ground floor or is empty → any type can be placed
+        if (incomingStyle != null && floorStyleData.Count > 0)
+        {
+            BuildingStyleSO topStyle = floorStyleData[floorStyleData.Count - 1];
+            if (topStyle != incomingStyle)
+                return false;
+        }
+        
+        return true;
+    }
+    
+    /// <summary>
+    /// Get the style of the top floor (ground or movable, whichever is on top)
     /// </summary>
     public BuildingStyleSO GetTopFloorStyle()
     {
@@ -128,12 +171,21 @@ public class BuildingStack : MonoBehaviour
     }
     
     /// <summary>
-    /// Remove and return the top floor
+    /// Remove and return the top floor.
+    /// Cannot remove ground floor (it's permanent).
     /// </summary>
     public (GameObject floorObject, BuildingStyleSO style) RemoveTopFloor()
     {
-        if (floors.Count == 0)
+        // Can't remove if empty or only ground remains
+        if (floors.Count <= groundFloorCount)
             return (null, null);
+        
+        // If was completed, revert visuals before removing
+        if (isCompleted)
+        {
+            isCompleted = false;
+            SetCompletionVisuals(false);
+        }
         
         int lastIndex = floors.Count - 1;
         GameObject floor = floors[lastIndex];
@@ -153,9 +205,8 @@ public class BuildingStack : MonoBehaviour
     /// </summary>
     public void AddFloor(GameObject floor, BuildingStyleSO style, float animDuration = 0f)
     {
-        // Calculate target position
+        // Calculate target position (index in full list)
         int floorIndex = floors.Count;
-        if (groundFloor != null) floorIndex++;
         
         float localY = FIRST_FLOOR_LOCAL_Y + (floorIndex * localFloorSpacing);
         Vector3 targetLocalPos = new Vector3(0, localY, 0);
@@ -170,7 +221,6 @@ public class BuildingStack : MonoBehaviour
         
         if (animDuration > 0 && gameObject.activeInHierarchy)
         {
-            // Animate to position
             if (currentAnimation != null) StopCoroutine(currentAnimation);
             currentAnimation = StartCoroutine(AnimateFloorToPosition(floor, targetLocalPos, animDuration));
         }
@@ -178,6 +228,9 @@ public class BuildingStack : MonoBehaviour
         {
             floor.transform.localPosition = targetLocalPos;
         }
+        
+        // Check if stack just became complete
+        CheckCompletion();
     }
     
     private IEnumerator AnimateFloorToPosition(GameObject floor, Vector3 targetLocalPos, float duration)
@@ -216,8 +269,8 @@ public class BuildingStack : MonoBehaviour
             foundationRenderer.material.color = selected ? highlightColor : originalColor;
         }
         
-        // Elevate or lower the top floor
-        if (floors.Count > 0)
+        // Elevate or lower the top floor (only if we have movable floors)
+        if (MovableFloorCount > 0)
         {
             GameObject topFloor = floors[floors.Count - 1];
             if (topFloor != null)
@@ -226,14 +279,11 @@ public class BuildingStack : MonoBehaviour
                 
                 if (selected)
                 {
-                    // Move up by 8 local units (= 2 world units since parent Y scale is 0.25)
                     pos.y += 8f;
                 }
                 else
                 {
-                    // Calculate correct position
                     int floorIndex = floors.Count - 1;
-                    if (groundFloor != null) floorIndex++;
                     pos.y = FIRST_FLOOR_LOCAL_Y + (floorIndex * localFloorSpacing);
                 }
                 
@@ -264,26 +314,31 @@ public class BuildingStack : MonoBehaviour
     }
     
     // ========================================
-    // WIN CONDITION
+    // COMPLETION SYSTEM
     // ========================================
     
     /// <summary>
-    /// Check if this stack is complete (all floors match goal style)
+    /// Complete = FULL (at max capacity) AND all floors are the same type.
+    /// No "goal style" needed — just checks uniformity.
+    /// Empty stacks (no floors at all) count as satisfied for win condition.
+    /// Stacks with only ground floor count as satisfied (building is "vacant").
     /// </summary>
     public bool IsComplete()
     {
-        // Empty stacks with no goal are considered complete
-        if (myStyle == null)
-            return floors.Count == 0;
+        // Empty = satisfied for win condition
+        if (floors.Count == 0) return true;
         
-        // Must have floors to be complete
-        if (floors.Count == 0)
-            return false;
+        // Only ground floor = vacant building, satisfied
+        if (floors.Count <= groundFloorCount) return true;
         
-        // All movable floors must match goal style
-        foreach (var style in floorStyleData)
+        // Must be at max capacity to be truly "complete"
+        if (floors.Count < maxStackHeight) return false;
+        
+        // All floors (including ground) must be the same type
+        BuildingStyleSO firstStyle = floorStyleData[0];
+        for (int i = 1; i < floorStyleData.Count; i++)
         {
-            if (style != myStyle)
+            if (floorStyleData[i] != firstStyle)
                 return false;
         }
         
@@ -291,7 +346,56 @@ public class BuildingStack : MonoBehaviour
     }
     
     /// <summary>
-    /// Check if this stack is empty (no movable floors)
+    /// Check completion and trigger visuals if newly complete.
+    /// Only locks stacks that are truly full and uniform.
     /// </summary>
-    public bool IsEmpty => floors.Count == 0;
+    private void CheckCompletion()
+    {
+        // Don't lock empty or ground-only stacks
+        if (floors.Count <= groundFloorCount) return;
+        
+        bool nowComplete = IsComplete();
+        
+        if (nowComplete && !isCompleted)
+        {
+            isCompleted = true;
+            SetCompletionVisuals(true);
+            Debug.Log($"<color=green>🏙️ Stack complete! All {floors.Count} floors matched.</color>");
+        }
+        else if (!nowComplete && isCompleted)
+        {
+            isCompleted = false;
+            SetCompletionVisuals(false);
+        }
+    }
+    
+    /// <summary>
+    /// Toggle CompleteBuilding/IncompleteBuilding children on ALL floors.
+    /// Floor prefab expected structure:
+    ///   FloorPrefab
+    ///     ├── IncompleteBuilding  (active by default)
+    ///     └── CompleteBuilding    (inactive by default)
+    /// </summary>
+    private void SetCompletionVisuals(bool complete)
+    {
+        foreach (var floor in floors)
+        {
+            if (floor != null)
+                ToggleFloorVisuals(floor, complete);
+        }
+    }
+    
+    private void ToggleFloorVisuals(GameObject floor, bool complete)
+    {
+        Transform incomplete = floor.transform.Find("IncompleteBuilding");
+        Transform completed = floor.transform.Find("CompleteBuilding");
+        
+        if (incomplete != null) incomplete.gameObject.SetActive(!complete);
+        if (completed != null) completed.gameObject.SetActive(complete);
+    }
+    
+    /// <summary>
+    /// Check if this stack has no movable floors
+    /// </summary>
+    public bool IsEmpty => MovableFloorCount == 0;
 }

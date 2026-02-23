@@ -38,8 +38,8 @@ public class DifficultyConfigSO : ScriptableObject
     public float level500Cognitive = 65f;
 
     [Header("Player Move Limit")]
-    [Tooltip("Multiplier for player moves vs optimal. 2.5 = 150% extra moves allowed")]
-    public float playerLimitMultiplier = 2.5f;
+    [Tooltip("Multiplier for player moves vs optimal. 1.8 = 80% extra moves allowed (tighter = more ad demand)")]
+    public float playerLimitMultiplier = 1.8f;
     
     [Tooltip("Round player limit to nearest N")]
     public int playerLimitRounding = 5;

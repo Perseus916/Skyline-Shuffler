@@ -3,28 +3,20 @@ using UnityEngine.UI;
 using TMPro;
 
 /// <summary>
-/// Home screen main menu UI.
+/// Home screen UI. Single "Play" button that always loads the right level.
 /// </summary>
 public class HomeMenuUI : MonoBehaviour
 {
     [Header("Buttons")]
-    [SerializeField] private Button continueButton;
+    [SerializeField] private Button playButton;
     [SerializeField] private Button levelsButton;
     [SerializeField] private Button settingsButton;
     
-    [Header("Continue Button State")]
-    [SerializeField] private GameObject continueActiveState;
-    [SerializeField] private GameObject continueDisabledState;
-    [SerializeField] private TextMeshProUGUI continueLevelText;
-    
-    [Header("Stats Display")]
+    [Header("Display")]
+    [SerializeField] private TextMeshProUGUI playButtonText;
     [SerializeField] private TextMeshProUGUI totalStarsText;
-    [SerializeField] private TextMeshProUGUI levelsCompletedText;
     
-    [Header("Panels")]
-    [SerializeField] private GameObject settingsPanel;
-    
-    private void Start()
+    private void OnEnable()
     {
         SetupButtons();
         UpdateUI();
@@ -32,41 +24,32 @@ public class HomeMenuUI : MonoBehaviour
     
     private void SetupButtons()
     {
-        continueButton?.onClick.AddListener(OnContinueClicked);
+        playButton?.onClick.RemoveAllListeners();
+        levelsButton?.onClick.RemoveAllListeners();
+        settingsButton?.onClick.RemoveAllListeners();
+        
+        playButton?.onClick.AddListener(OnPlayClicked);
         levelsButton?.onClick.AddListener(OnLevelsClicked);
         settingsButton?.onClick.AddListener(OnSettingsClicked);
     }
     
     private void UpdateUI()
     {
-        // Check if there's a game to continue
-        bool hasProgress = SaveSystem.Data.currentLevel > 1 || SaveSystem.Data.hasInProgressGame;
-        
-        if (continueActiveState != null)
-            continueActiveState.SetActive(hasProgress);
-        if (continueDisabledState != null)
-            continueDisabledState.SetActive(!hasProgress);
-        
-        continueButton.interactable = hasProgress;
-        
-        // Show what level they'll continue to
-        if (continueLevelText != null && hasProgress)
+        // Show what level they'll play
+        if (playButtonText != null)
         {
-            if (SaveSystem.Data.hasInProgressGame)
-                continueLevelText.text = $"Resume Level {SaveSystem.Data.inProgressLevel}";
+            int nextLevel = SaveSystem.Data.currentLevel;
+            if (nextLevel <= 1)
+                playButtonText.text = "Play";
             else
-                continueLevelText.text = $"Level {SaveSystem.Data.currentLevel}";
+                playButtonText.text = $"Level {nextLevel}";
         }
         
-        // Stats
         if (totalStarsText != null)
-            totalStarsText.text = SaveSystem.GetTotalStars().ToString();
-        
-        if (levelsCompletedText != null)
-            levelsCompletedText.text = $"{SaveSystem.Data.levelProgress.Count} Levels";
+            totalStarsText.text = $"⭐ {SaveSystem.GetTotalStars()}";
     }
     
-    private void OnContinueClicked()
+    private void OnPlayClicked()
     {
         if (GameManager.Instance != null)
             GameManager.Instance.ContinueGame();
@@ -75,12 +58,12 @@ public class HomeMenuUI : MonoBehaviour
     private void OnLevelsClicked()
     {
         if (GameManager.Instance != null)
-            GameManager.Instance.LoadLevelSelectScene();
+            GameManager.Instance.ShowLevelSelect();
     }
     
     private void OnSettingsClicked()
     {
-        if (settingsPanel != null)
-            settingsPanel.SetActive(true);
+        if (GameManager.Instance != null)
+            GameManager.Instance.ShowSettings();
     }
 }

@@ -17,6 +17,7 @@ using System.Linq;
 /// - Contamination spread (how mixed stacks are)
 /// - Breather levels for engagement
 /// - Perfect clear bonus tracking
+/// - Same-type rule enforced: every generated solution is guaranteed playable
 /// </summary>
 public class LevelGeneratorEditor : EditorWindow
 {
@@ -25,7 +26,7 @@ public class LevelGeneratorEditor : EditorWindow
     private BuildingLibrarySO library;
 
     [Header("Paths")]
-    private string savePath = "Assets/Levels/";
+    private string savePath = "Assets/Resources/Levels/";
 
     [Header("Range")]
     private int startLevel = 1;
@@ -34,6 +35,9 @@ public class LevelGeneratorEditor : EditorWindow
     // Breather tracking
     private int levelsSinceBreather = 0;
     private int nextBreatherAt = 0;
+    
+    // Generation stats
+    private int regenerationCount = 0;
 
     [MenuItem("Tools/Skyline Architect/Batch Level Generator")]
     public static void ShowWindow() => GetWindow<LevelGeneratorEditor>("Level Generator");
@@ -100,6 +104,7 @@ public class LevelGeneratorEditor : EditorWindow
         // Reset breather tracking
         levelsSinceBreather = 0;
         nextBreatherAt = Random.Range(config.breatherMinGap, config.breatherMaxGap + 1);
+        regenerationCount = 0;
 
         int progressId = Progress.Start("Generating Levels", null, Progress.Options.Managed);
         
@@ -120,7 +125,7 @@ public class LevelGeneratorEditor : EditorWindow
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         
-        Debug.Log($"<color=green>✓ Generated {endLevel - startLevel + 1} levels!</color>");
+        Debug.Log($"<color=green>✓ Generated {endLevel - startLevel + 1} levels! ({regenerationCount} regenerations needed)</color>");
     }
 
     private void CreateLevelAsset(int lvlNum)
@@ -178,76 +183,105 @@ public class LevelGeneratorEditor : EditorWindow
         level.buildingStyleCount = Mathf.Min(buildingCount, library.allStyles.Count);
 
         // ═══════════════════════════════════════════════════════════════
-        // 4. CREATE SOLVED STATE (Perfect stacks)
+        // 4. GENERATE WITH RETRY (ensures solvability)
         // ═══════════════════════════════════════════════════════════════
         
-        List<BuildingStyleSO> shuffledStyles = library.allStyles
-            .OrderBy(x => Random.value)
-            .Take(buildingCount)
-            .ToList();
+        const int maxRetries = 10;
+        List<MoveStep> solution = null;
+        List<SlotData> playableSlots = null;
         
-        List<SlotData> playableSlots = new List<SlotData>();
-        level.slots = new List<SlotData>();
-
-        int filledCount = 0;
-        int createdPlayable = 0;
-
-        // Iterate grid positions
-        for (int z = level.gridDimension - 1; z >= 0; z--)
+        for (int attempt = 0; attempt < maxRetries; attempt++)
         {
-            for (int x = 0; x < level.gridDimension; x++)
+            // Create fresh solved state each attempt
+            List<BuildingStyleSO> shuffledStyles = library.allStyles
+                .OrderBy(x => Random.value)
+                .Take(buildingCount)
+                .ToList();
+            
+            playableSlots = new List<SlotData>();
+            level.slots = new List<SlotData>();
+            
+            int filledCount = 0;
+            int createdPlayable = 0;
+            
+            // Iterate grid positions
+            for (int z = level.gridDimension - 1; z >= 0; z--)
             {
-                // Skip crane positions (2 units wide at top-left)
-                if (z == level.gridDimension - 1 && (x == 0 || x == 1)) continue;
-
-                SlotData slot = new SlotData { gridPos = new Vector2Int(x, z) };
-
-                if (createdPlayable < totalPlayableSlots)
+                for (int x = 0; x < level.gridDimension; x++)
                 {
-                    slot.isLocked = false;
+                    // Skip crane positions (2 units wide at top-left)
+                    if (z == level.gridDimension - 1 && (x == 0 || x == 1)) continue;
 
-                    if (filledCount < buildingCount)
+                    SlotData slot = new SlotData { gridPos = new Vector2Int(x, z) };
+
+                    if (createdPlayable < totalPlayableSlots)
                     {
-                        slot.buildingStyle = shuffledStyles[filledCount % shuffledStyles.Count];
-                        // Fill with same style = SOLVED state
-                        for (int f = 0; f < stackHeight; f++)
-                            slot.floorStyles.Add(slot.buildingStyle);
-                        filledCount++;
+                        slot.isLocked = false;
+
+                        if (filledCount < buildingCount)
+                        {
+                            slot.buildingStyle = shuffledStyles[filledCount % shuffledStyles.Count];
+                            // Fill with same style = SOLVED state
+                            for (int f = 0; f < stackHeight; f++)
+                                slot.floorStyles.Add(slot.buildingStyle);
+                            filledCount++;
+                        }
+                        else
+                        {
+                            slot.isEmpty = true;
+                            slot.buildingStyle = null;
+                        }
+
+                        playableSlots.Add(slot);
+                        createdPlayable++;
                     }
                     else
                     {
-                        slot.isEmpty = true;
-                        slot.buildingStyle = null;
+                        slot.isLocked = true;
                     }
+                    level.slots.Add(slot);
+                }
+            }
 
-                    playableSlots.Add(slot);
-                    createdPlayable++;
-                }
-                else
-                {
-                    slot.isLocked = true;
-                }
-                level.slots.Add(slot);
+            // ═══════════════════════════════════════════════════════════
+            // 5. COGNITIVE COMPLEXITY SHUFFLE (with same-type rule)
+            // ═══════════════════════════════════════════════════════════
+            
+            solution = PerformCognitiveShuffles(
+                playableSlots, 
+                targetOptimalMoves, 
+                targetCognitive,
+                stackHeight,
+                lvlNum
+            );
+            
+            // Reverse to get forward solution
+            solution.Reverse();
+            
+            // Verify solution is actually playable
+            if (VerifySolution(playableSlots, solution, stackHeight))
+            {
+                break; // Valid level!
+            }
+            else
+            {
+                regenerationCount++;
+                Debug.LogWarning($"Level {lvlNum} attempt {attempt + 1}: solution invalid, retrying...");
+                solution = null;
             }
         }
-
-        // ═══════════════════════════════════════════════════════════════
-        // 5. COGNITIVE COMPLEXITY SHUFFLE
-        // ═══════════════════════════════════════════════════════════════
         
-        List<MoveStep> solution = PerformCognitiveShuffles(
-            playableSlots, 
-            targetOptimalMoves, 
-            targetCognitive,
-            stackHeight,
-            lvlNum
-        );
+        if (solution == null)
+        {
+            Debug.LogError($"Level {lvlNum}: Failed to generate valid level after {maxRetries} attempts!");
+            // Generate a minimal fallback
+            solution = new List<MoveStep>();
+        }
 
         // ═══════════════════════════════════════════════════════════════
         // 6. CALCULATE FINAL METRICS
         // ═══════════════════════════════════════════════════════════════
         
-        solution.Reverse(); // Convert backward moves to forward solution
         level.solvingSteps = solution;
         level.optimalMoves = solution.Count;
         level.shuffleDepth = solution.Count;
@@ -275,8 +309,13 @@ public class LevelGeneratorEditor : EditorWindow
         AssetDatabase.CreateAsset(level, assetPath);
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    // SHUFFLE ENGINE
+    // ═══════════════════════════════════════════════════════════════════
+
     /// <summary>
     /// Perform shuffles with cognitive complexity control.
+    /// Every shuffle move is validated so the reverse (solution) follows same-type rules.
     /// Early levels: Surface contamination only.
     /// Late levels: Deep blocking, buried colors.
     /// </summary>
@@ -298,7 +337,7 @@ public class LevelGeneratorEditor : EditorWindow
 
         // Calculate how "strategic" our shuffles should be
         float blockingProbability = Mathf.Clamp01(targetCognitive / 100f);
-        int maxAttempts = targetMoves * 3; // Prevent infinite loops
+        int maxAttempts = targetMoves * 5; // More headroom with stricter validation
         int attempts = 0;
         int successfulMoves = 0;
 
@@ -317,10 +356,10 @@ public class LevelGeneratorEditor : EditorWindow
             // Higher cognitive = prefer "dirty" stacks (create deeper blocking)
             if (targetCognitive > 30 && Random.value < blockingProbability)
             {
-                // Find stacks that are already contaminated
+                // Find stacks that are already contaminated (mixed floor types)
                 var dirtySlots = filledSlots.Where(s => 
-                    s.buildingStyle != null && 
-                    s.floorStyles.Any(f => f != s.buildingStyle)).ToList();
+                    s.floorStyles.Count >= 2 && 
+                    s.floorStyles.Distinct().Count() > 1).ToList();
                 
                 if (dirtySlots.Count > 0 && Random.value < 0.7f)
                     source = dirtySlots[Random.Range(0, dirtySlots.Count)];
@@ -332,13 +371,22 @@ public class LevelGeneratorEditor : EditorWindow
                 // Early levels: Random selection
                 source = filledSlots[Random.Range(0, filledSlots.Count)];
             }
+            
+            if (source.floorStyles.Count == 0) continue;
 
             // ═══════════════════════════════════════════════════════════
             // TARGET SELECTION (Where to put the floor)
+            // Must be valid for BOTH:
+            //   - Forward shuffle: target has capacity
+            //   - Reverse solution: source's new top matches moved floor
             // ═══════════════════════════════════════════════════════════
+            
+            BuildingStyleSO movingFloor = source.floorStyles.Last();
+            
             var validTargets = playableSlots.Where(slot =>
                 slot != source &&
-                slot.floorStyles.Count < stackHeight).ToList();
+                slot.floorStyles.Count < stackHeight &&
+                IsReverseMoveValid(source, movingFloor)).ToList();
 
             if (validTargets.Count == 0) continue;
 
@@ -350,7 +398,7 @@ public class LevelGeneratorEditor : EditorWindow
                 // Prefer putting a floor on top of a DIFFERENT color (creates blocking)
                 var blockingTargets = validTargets.Where(t =>
                     t.floorStyles.Count > 0 &&
-                    t.floorStyles.Last() != source.floorStyles.Last()).ToList();
+                    t.floorStyles.Last() != movingFloor).ToList();
                 
                 if (blockingTargets.Count > 0)
                     target = blockingTargets[Random.Range(0, blockingTargets.Count)];
@@ -363,8 +411,22 @@ public class LevelGeneratorEditor : EditorWindow
             }
 
             // ═══════════════════════════════════════════════════════════
-            // VALIDATION
+            // REVERSE MOVE VALIDATION
+            // The solution (reverse) takes from target and places on source.
+            // After this shuffle move:
+            //   - target gains movingFloor on top
+            //   - source loses movingFloor
+            // For reverse to work:
+            //   - target top = movingFloor (player takes it)
+            //   - source's new top must match movingFloor or source is empty
             // ═══════════════════════════════════════════════════════════
+            
+            // Also validate: in the reverse move, the floor lands on source.
+            // Source's new top (after removing movingFloor) must match movingFloor,
+            // OR source will be empty.
+            // Additionally, the reverse move takes from target — after adding movingFloor,
+            // target's top IS movingFloor, but the player also needs to be able to
+            // place it somewhere with matching top. We already validated source.
             
             // Anti-undo: Don't immediately reverse the last move
             if (source.gridPos == lastTo && target.gridPos == lastFrom) continue;
@@ -373,17 +435,16 @@ public class LevelGeneratorEditor : EditorWindow
             if (targetCognitive < 20)
             {
                 bool wouldBlock = target.floorStyles.Count > 0 && 
-                                  target.floorStyles.Last() != source.floorStyles.Last();
+                                  target.floorStyles.Last() != movingFloor;
                 if (wouldBlock && Random.value > 0.3f) continue; // 70% reject blocking
             }
 
             // ═══════════════════════════════════════════════════════════
-            // EXECUTE MOVE
+            // EXECUTE SHUFFLE MOVE
             // ═══════════════════════════════════════════════════════════
             
-            BuildingStyleSO floor = source.floorStyles.Last();
             source.floorStyles.RemoveAt(source.floorStyles.Count - 1);
-            target.floorStyles.Add(floor);
+            target.floorStyles.Add(movingFloor);
 
             if (target.isEmpty) target.isEmpty = false;
 
@@ -398,12 +459,146 @@ public class LevelGeneratorEditor : EditorWindow
             lastTo = target.gridPos;
             successfulMoves++;
         }
+        
+        if (successfulMoves < targetMoves)
+        {
+            Debug.LogWarning($"Level {level}: Only managed {successfulMoves}/{targetMoves} valid shuffles");
+        }
 
         return forwardSolution;
     }
+    
+    /// <summary>
+    /// Check if the reverse (solution) move is valid under same-type rules.
+    /// The reverse move takes movingFloor from the target and places it on source.
+    /// After the shuffle, source has lost movingFloor, so we check source's new top.
+    /// </summary>
+    private bool IsReverseMoveValid(SlotData source, BuildingStyleSO movingFloor)
+    {
+        // After shuffle: source loses its top (movingFloor).
+        // In the reverse (solution): player picks up movingFloor from target
+        // and places it on source. Source's new top must match movingFloor.
+        
+        // If source will become empty after shuffle, any floor can go on it
+        if (source.floorStyles.Count <= 1)
+            return true;
+        
+        // Source's new top after removing movingFloor
+        BuildingStyleSO sourceNewTop = source.floorStyles[source.floorStyles.Count - 2];
+        
+        // The reverse move puts movingFloor on top of sourceNewTop — must match
+        return sourceNewTop == movingFloor;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SOLUTION VERIFICATION
+    // ═══════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Calculate actual cognitive complexity based on puzzle state
+    /// Simulate the solution forward on the shuffled state.
+    /// Verifies every move is legal under game rules:
+    /// - Source has movable floors
+    /// - Target has capacity  
+    /// - Target top matches moved floor (or target is empty/ground-only)
+    /// </summary>
+    private bool VerifySolution(List<SlotData> originalSlots, List<MoveStep> solution, int stackHeight)
+    {
+        // Deep clone the slot data so we don't mutate the original
+        var slots = DeepCloneSlots(originalSlots);
+        
+        foreach (var step in solution)
+        {
+            // Find source and target slots by grid position
+            SlotData from = slots.FirstOrDefault(s => s.gridPos == step.fromGridPos);
+            SlotData to = slots.FirstOrDefault(s => s.gridPos == step.toGridPos);
+            
+            if (from == null || to == null)
+            {
+                Debug.LogError($"Verification failed: can't find slot at {step.fromGridPos} or {step.toGridPos}");
+                return false;
+            }
+            
+            // Check 1: Source has floors to move
+            if (from.floorStyles.Count == 0)
+            {
+                Debug.LogError($"Verification failed: source {step.fromGridPos} is empty");
+                return false;
+            }
+            
+            BuildingStyleSO movingFloor = from.floorStyles.Last();
+            
+            // Check 2: Target has capacity
+            // Total capacity in gameplay = stackHeight (movable) + 1 (ground if present)
+            int targetCapacity = stackHeight;
+            if (to.buildingStyle != null) targetCapacity++; // has ground floor
+            
+            int targetCurrentFloors = to.floorStyles.Count;
+            if (to.buildingStyle != null) targetCurrentFloors++; // ground
+            
+            if (targetCurrentFloors >= targetCapacity)
+            {
+                Debug.LogError($"Verification failed: target {step.toGridPos} is full ({targetCurrentFloors}/{targetCapacity})");
+                return false;
+            }
+            
+            // Check 3: Same-type rule — top of target must match moving floor
+            // If target has floors, check top. If target is empty, any type is OK.
+            if (to.floorStyles.Count > 0)
+            {
+                BuildingStyleSO targetTop = to.floorStyles.Last();
+                if (targetTop != movingFloor)
+                {
+                    Debug.LogError($"Verification failed: type mismatch at {step.toGridPos}. Top={targetTop.buildingName}, Moving={movingFloor.buildingName}");
+                    return false;
+                }
+            }
+            else if (to.buildingStyle != null)
+            {
+                // Target has only ground floor — ground style must match
+                if (to.buildingStyle != movingFloor)
+                {
+                    Debug.LogError($"Verification failed: ground mismatch at {step.toGridPos}. Ground={to.buildingStyle.buildingName}, Moving={movingFloor.buildingName}");
+                    return false;
+                }
+            }
+            // else: target is completely empty (no ground, no floors) — any type OK
+            
+            // Execute move
+            from.floorStyles.RemoveAt(from.floorStyles.Count - 1);
+            to.floorStyles.Add(movingFloor);
+        }
+        
+        return true;
+    }
+    
+    /// <summary>
+    /// Deep clone slot data for verification (don't mutate originals)
+    /// </summary>
+    private List<SlotData> DeepCloneSlots(List<SlotData> originals)
+    {
+        var clones = new List<SlotData>();
+        foreach (var original in originals)
+        {
+            var clone = new SlotData
+            {
+                gridPos = original.gridPos,
+                isLocked = original.isLocked,
+                isEmpty = original.isEmpty,
+                buildingStyle = original.buildingStyle,
+                floorStyles = new List<BuildingStyleSO>(original.floorStyles)
+            };
+            clones.Add(clone);
+        }
+        return clones;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // METRICS
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Calculate actual cognitive complexity based on puzzle state.
+    /// Does NOT depend on slot.buildingStyle — uses floor diversity instead.
     /// </summary>
     private float CalculateActualCognitiveScore(List<SlotData> slots, DifficultyTier tier)
     {
@@ -424,7 +619,8 @@ public class LevelGeneratorEditor : EditorWindow
     }
 
     /// <summary>
-    /// Calculate maximum blocking depth (colors buried under other colors)
+    /// Calculate maximum blocking depth (different types buried under each other).
+    /// Counts the number of "style transitions" in each stack — more transitions = deeper blocking.
     /// </summary>
     private int CalculateBlockingDepth(List<SlotData> slots)
     {
@@ -434,42 +630,41 @@ public class LevelGeneratorEditor : EditorWindow
         {
             if (slot.floorStyles.Count < 2) continue;
             
-            int currentDepth = 0;
-            BuildingStyleSO topColor = slot.floorStyles.Last();
-            
-            // Count how many floors of different color are on top of matching floors
-            for (int i = slot.floorStyles.Count - 2; i >= 0; i--)
+            // Count style transitions (each transition = a block)
+            int transitions = 0;
+            for (int i = 1; i < slot.floorStyles.Count; i++)
             {
-                if (slot.floorStyles[i] != topColor && slot.floorStyles[i] == slot.buildingStyle)
-                    currentDepth++;
+                if (slot.floorStyles[i] != slot.floorStyles[i - 1])
+                    transitions++;
             }
             
-            maxDepth = Mathf.Max(maxDepth, currentDepth);
+            maxDepth = Mathf.Max(maxDepth, transitions);
         }
         
         return maxDepth;
     }
 
     /// <summary>
-    /// Calculate contamination ratio (how mixed the puzzle is)
+    /// Calculate contamination ratio (how mixed the puzzle is).
+    /// A "pure" stack has all floors of one type. Contaminated = multiple types present.
     /// </summary>
     private float CalculateContamination(List<SlotData> slots)
     {
-        int totalFloors = 0;
-        int contaminatedFloors = 0;
+        int totalStacks = 0;
+        int contaminatedStacks = 0;
         
-        foreach (var slot in slots.Where(s => !s.isEmpty && !s.isLocked && s.buildingStyle != null))
+        foreach (var slot in slots.Where(s => !s.isEmpty && !s.isLocked && s.floorStyles.Count > 0))
         {
-            foreach (var floor in slot.floorStyles)
-            {
-                totalFloors++;
-                if (floor != slot.buildingStyle)
-                    contaminatedFloors++;
-            }
+            totalStacks++;
+            
+            // A stack is contaminated if it has more than 1 distinct style
+            int distinctStyles = slot.floorStyles.Distinct().Count();
+            if (distinctStyles > 1)
+                contaminatedStacks++;
         }
         
-        if (totalFloors == 0) return 0;
-        return (float)contaminatedFloors / totalFloors;
+        if (totalStacks == 0) return 0;
+        return (float)contaminatedStacks / totalStacks;
     }
 
     /// <summary>

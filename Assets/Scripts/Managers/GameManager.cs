@@ -1,86 +1,211 @@
 using UnityEngine;
-using UnityEngine.SceneManagement;
+using UnityEngine.Events;
 
 /// <summary>
-/// Persistent singleton that manages game state and scene transitions.
-/// Survives scene loads using DontDestroyOnLoad.
+/// Central game controller for single-scene architecture.
+/// Loads levels from Resources/Levels/ by name at runtime.
 /// </summary>
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
     
-    [Header("Scene Names")]
-    public string homeSceneName = "HomeScene";
-    public string levelSelectSceneName = "LevelSelectScene";
-    public string gameSceneName = "MainGame";
+    [Header("Core References")]
+    [SerializeField] private LevelLoader levelLoader;
     
     [Header("Level Settings")]
-    public int totalLevelsAvailable = 100; // Can be expanded
+    [Tooltip("Path inside Resources folder where levels are stored")]
+    [SerializeField] private string levelResourcePath = "Levels/Level_";
+    [SerializeField] private int totalLevelsAvailable = 100;
+    
+    [Header("UI Panels")]
+    [SerializeField] private GameObject homePanel;
+    [SerializeField] private GameObject levelSelectPanel;
+    [SerializeField] private GameObject gameplayPanel;
+    [SerializeField] private GameObject settingsPanel;
+    
+    /// <summary>True when the gameplay panel is active (player is in a level)</summary>
+    public bool IsGameplayActive => gameplayPanel != null && gameplayPanel.activeSelf;
+    
+    [Header("Gameplay UI")]
+    [SerializeField] private LevelCompleteUI levelCompleteUI;
+    [SerializeField] private DailyRewardUI dailyRewardUI;
+    [SerializeField] private ShopUI shopUI;
+    
+    [Header("Events")]
+    public UnityEvent<int> OnLevelLoaded;
     
     // Runtime state
     public int SelectedLevel { get; private set; } = 1;
-    public bool IsResumingGame { get; private set; } = false;
+    public int TotalLevels => totalLevelsAvailable;
+    
+    // ========================================
+    // LIFECYCLE
+    // ========================================
     
     private void Awake()
     {
-        // Singleton pattern with persistence
+        // Singleton (no DontDestroyOnLoad — single scene)
         if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
             return;
         }
-        
         Instance = this;
-        DontDestroyOnLoad(gameObject);
         
-        // Load save data on startup
+        // Load save data
         SaveSystem.Load();
     }
     
+    private void Start()
+    {
+        // Always start at home screen
+        ShowHomeScreen();
+        
+        // Show daily reward if available
+        if (dailyRewardUI != null && dailyRewardUI.ShouldShow())
+        {
+            dailyRewardUI.Show();
+        }
+    }
+    
     // ========================================
-    // LEVEL SELECTION
+    // PANEL MANAGEMENT
+    // ========================================
+    
+    private void HideAllPanels()
+    {
+        if (homePanel != null) homePanel.SetActive(false);
+        if (levelSelectPanel != null) levelSelectPanel.SetActive(false);
+        if (gameplayPanel != null) gameplayPanel.SetActive(false);
+        if (settingsPanel != null) settingsPanel.SetActive(false);
+        if (levelCompleteUI != null) levelCompleteUI.Hide();
+    }
+    
+    public void ShowHomeScreen()
+    {
+        HideAllPanels();
+        levelLoader.ClearCurrentLevel();
+        if (homePanel != null) homePanel.SetActive(true);
+        if (AudioManager.Instance != null) AudioManager.Instance.PlayMenuMusic();
+    }
+    
+    public void ShowLevelSelect()
+    {
+        HideAllPanels();
+        levelLoader.ClearCurrentLevel();
+        if (levelSelectPanel != null) levelSelectPanel.SetActive(true);
+    }
+    
+    public void ShowSettings()
+    {
+        if (settingsPanel != null) settingsPanel.SetActive(true);
+        if (AudioManager.Instance != null) AudioManager.Instance.PlayPopupOpen();
+    }
+    
+    public void ShowShop()
+    {
+        if (shopUI != null) shopUI.Show();
+        if (AudioManager.Instance != null) AudioManager.Instance.PlayPopupOpen();
+    }
+    
+    public void HideSettings()
+    {
+        if (settingsPanel != null) settingsPanel.SetActive(false);
+    }
+    
+    // ========================================
+    // LEVEL LOADING (Resources.Load)
     // ========================================
     
     /// <summary>
-    /// Select and load a specific level
+    /// Load a LevelDataSO from Resources by level number.
+    /// e.g. Level 5 → Resources.Load("Levels/Level_5")
+    /// </summary>
+    private LevelDataSO LoadLevelData(int levelNumber)
+    {
+        string path = $"{levelResourcePath}{levelNumber}";
+        LevelDataSO data = Resources.Load<LevelDataSO>(path);
+        
+        if (data == null)
+            Debug.LogError($"Level not found at Resources/{path}!");
+        
+        return data;
+    }
+    
+    /// <summary>
+    /// Load and play a specific level (fresh start, no resume)
     /// </summary>
     public void PlayLevel(int levelNumber)
     {
+        LevelDataSO levelData = LoadLevelData(levelNumber);
+        if (levelData == null) return;
+        
+        // Clear any old in-progress state (fresh start)
+        SaveSystem.ClearInProgressGame();
+        
         SelectedLevel = levelNumber;
-        IsResumingGame = false;
         SaveSystem.Data.currentLevel = levelNumber;
         SaveSystem.Save();
         
-        LoadGameScene();
+        HideAllPanels();
+        if (gameplayPanel != null) gameplayPanel.SetActive(true);
+        
+        // Load fresh — no saved state
+        levelLoader.LoadLevel(levelData, levelNumber);
+        
+        OnLevelLoaded?.Invoke(levelNumber);
+        Debug.Log($"<color=cyan>Playing Level {levelNumber} (fresh)</color>");
     }
     
     /// <summary>
-    /// Continue from last played level or in-progress game
+    /// Continue from last played / in-progress level.
+    /// If there's a saved state, restores exact floor positions and move count.
     /// </summary>
     public void ContinueGame()
     {
+        // Check for in-progress game first
         if (SaveSystem.Data.hasInProgressGame)
         {
-            SelectedLevel = SaveSystem.Data.inProgressLevel;
-            IsResumingGame = true;
-        }
-        else
-        {
-            SelectedLevel = SaveSystem.Data.currentLevel;
-            IsResumingGame = false;
+            int level = SaveSystem.Data.inProgressLevel;
+            LevelDataSO levelData = LoadLevelData(level);
+            if (levelData == null) 
+            {
+                // Fallback: corrupted save, start fresh
+                SaveSystem.ClearInProgressGame();
+                PlayLevel(Mathf.Max(1, SaveSystem.Data.currentLevel));
+                return;
+            }
+            
+            // Parse saved state
+            LevelStateData savedState = null;
+            try
+            {
+                savedState = JsonUtility.FromJson<LevelStateData>(SaveSystem.Data.inProgressState);
+            }
+            catch
+            {
+                Debug.LogWarning("Failed to parse in-progress state, starting fresh");
+            }
+            
+            if (savedState != null)
+            {
+                SelectedLevel = level;
+                
+                HideAllPanels();
+                if (gameplayPanel != null) gameplayPanel.SetActive(true);
+                
+                // Load level layout, then restore floor positions
+                levelLoader.LoadLevelWithRestore(levelData, level, savedState);
+                
+                OnLevelLoaded?.Invoke(level);
+                Debug.Log($"<color=green>Resuming Level {level} from saved state</color>");
+                return;
+            }
         }
         
-        LoadGameScene();
-    }
-    
-    /// <summary>
-    /// Replay completed level
-    /// </summary>
-    public void ReplayLevel(int levelNumber)
-    {
-        SelectedLevel = levelNumber;
-        IsResumingGame = false;
-        LoadGameScene();
+        // No in-progress game — start next level
+        int nextLevel = Mathf.Max(1, SaveSystem.Data.currentLevel);
+        PlayLevel(nextLevel);
     }
     
     /// <summary>
@@ -88,37 +213,25 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void LoadNextLevel()
     {
-        SelectedLevel++;
-        IsResumingGame = false;
+        int nextLevel = SelectedLevel + 1;
         
-        if (SelectedLevel > totalLevelsAvailable)
+        // Check if next level exists
+        if (LoadLevelData(nextLevel) == null)
         {
-            // All levels complete! Go back to level select
-            LoadLevelSelectScene();
+            Debug.Log("<color=green>No more levels!</color>");
+            ShowLevelSelect();
+            return;
         }
-        else
-        {
-            LoadGameScene();
-        }
+        
+        PlayLevel(nextLevel);
     }
     
-    // ========================================
-    // SCENE TRANSITIONS
-    // ========================================
-    
-    public void LoadHomeScene()
+    /// <summary>
+    /// Replay current level
+    /// </summary>
+    public void ReplayLevel()
     {
-        SceneManager.LoadScene(homeSceneName);
-    }
-    
-    public void LoadLevelSelectScene()
-    {
-        SceneManager.LoadScene(levelSelectSceneName);
-    }
-    
-    public void LoadGameScene()
-    {
-        SceneManager.LoadScene(gameSceneName);
+        PlayLevel(SelectedLevel);
     }
     
     // ========================================
@@ -126,51 +239,45 @@ public class GameManager : MonoBehaviour
     // ========================================
     
     /// <summary>
-    /// Called when level is completed
+    /// Called by GameplayManager when level is won
     /// </summary>
     public void OnLevelComplete(int levelNumber, int movesTaken, int optimalMoves)
     {
         int stars = CalculateStars(movesTaken, optimalMoves);
+        
+        // Check if this is a new best for star bonus
+        var previousProgress = SaveSystem.GetLevelProgress(levelNumber);
+        bool isNewThreeStar = stars == 3 && previousProgress.stars < 3;
+        
         SaveSystem.SetLevelProgress(levelNumber, stars, movesTaken);
         
-        Debug.Log($"<color=green>Level {levelNumber} complete! Stars: {stars}, Moves: {movesTaken}/{optimalMoves}</color>");
+        // Award coins: 10 per star + bonus for first 3-star
+        int coinsEarned = stars * 10;
+        if (isNewThreeStar) coinsEarned += 20; // First 3-star bonus
+        SaveSystem.AddCoins(coinsEarned);
+        
+        // Replenish 1 free undo on level complete
+        SaveSystem.AddFreeUndos(1);
+        
+        // Show level complete UI
+        if (levelCompleteUI != null)
+        {
+            levelCompleteUI.Show(levelNumber, movesTaken, optimalMoves, stars, coinsEarned);
+        }
+        
+        Debug.Log($"<color=green>Level {levelNumber} complete! ⭐{stars} | +{coinsEarned} coins | Moves: {movesTaken}/{optimalMoves}</color>");
     }
     
-    /// <summary>
-    /// Calculate stars based on moves
-    /// </summary>
     public int CalculateStars(int movesTaken, int optimalMoves)
     {
+        if (optimalMoves <= 0) return 1;
+        
         if (movesTaken <= optimalMoves)
-            return 3; // Perfect!
-        else if (movesTaken <= optimalMoves * 1.5f)
-            return 2; // Good
+            return 3;
+        else if (movesTaken <= Mathf.CeilToInt(optimalMoves * 1.5f))
+            return 2;
         else
-            return 1; // Completed
-    }
-    
-    // ========================================
-    // IN-PROGRESS GAME
-    // ========================================
-    
-    /// <summary>
-    /// Save current game state for resume later
-    /// </summary>
-    public void SaveGameState(int levelNumber, string stateJson, int moveCount)
-    {
-        SaveSystem.SaveInProgressGame(levelNumber, stateJson, moveCount);
-    }
-    
-    /// <summary>
-    /// Get saved game state for resume
-    /// </summary>
-    public (string stateJson, int moveCount) GetSavedGameState()
-    {
-        if (SaveSystem.Data.hasInProgressGame)
-        {
-            return (SaveSystem.Data.inProgressState, SaveSystem.Data.inProgressMoves);
-        }
-        return (null, 0);
+            return 1;
     }
     
     // ========================================
@@ -180,32 +287,18 @@ public class GameManager : MonoBehaviour
     public float MusicVolume
     {
         get => SaveSystem.Data.musicVolume;
-        set
-        {
-            SaveSystem.Data.musicVolume = value;
-            SaveSystem.Save();
-            // TODO: Apply to audio mixer
-        }
+        set { SaveSystem.Data.musicVolume = value; SaveSystem.Save(); }
     }
     
     public float SFXVolume
     {
         get => SaveSystem.Data.sfxVolume;
-        set
-        {
-            SaveSystem.Data.sfxVolume = value;
-            SaveSystem.Save();
-            // TODO: Apply to audio mixer
-        }
+        set { SaveSystem.Data.sfxVolume = value; SaveSystem.Save(); }
     }
     
     public bool VibrationEnabled
     {
         get => SaveSystem.Data.vibrationEnabled;
-        set
-        {
-            SaveSystem.Data.vibrationEnabled = value;
-            SaveSystem.Save();
-        }
+        set { SaveSystem.Data.vibrationEnabled = value; SaveSystem.Save(); }
     }
 }

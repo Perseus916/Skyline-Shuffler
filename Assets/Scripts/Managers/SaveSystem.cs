@@ -26,6 +26,11 @@ public class GameSaveData
     public string inProgressState; // JSON of floor positions
     public int inProgressMoves;
     
+    // Economy
+    public int coins = 0;
+    public int freeUndos = 2;    // Start with 2 free undos (tight = ad demand)
+    public int freeHints = 1;    // Start with 1 free hint
+    
     // Settings
     public float musicVolume = 1f;
     public float sfxVolume = 1f;
@@ -194,6 +199,67 @@ public static class SaveSystem
             total += entry.progress.stars;
         }
         return total;
+    }
+    
+    // ========================================
+    // COINS
+    // ========================================
+    
+    public static int GetCoins() => Data.coins;
+    
+    /// <summary>Add coins and save</summary>
+    public static void AddCoins(int amount)
+    {
+        Data.coins += amount;
+        Save();
+    }
+    
+    /// <summary>Try to spend coins, returns false if insufficient</summary>
+    public static bool SpendCoins(int amount)
+    {
+        if (Data.coins < amount) return false;
+        Data.coins -= amount;
+        Save();
+        return true;
+    }
+    
+    // ========================================
+    // CONSUMABLES (Undo / Hint)
+    // ========================================
+    
+    public static int GetFreeUndos() => Data.freeUndos;
+    public static int GetFreeHints() => Data.freeHints;
+    
+    /// <summary>Use a free undo. Returns true if available.</summary>
+    public static bool UseFreeUndo()
+    {
+        if (Data.freeUndos <= 0) return false;
+        Data.freeUndos--;
+        Save();
+        return true;
+    }
+    
+    /// <summary>Use a free hint. Returns true if available.</summary>
+    public static bool UseFreeHint()
+    {
+        if (Data.freeHints <= 0) return false;
+        Data.freeHints--;
+        Save();
+        return true;
+    }
+    
+    /// <summary>Add free undos (from ads, shop, etc.)</summary>
+    public static void AddFreeUndos(int count)
+    {
+        Data.freeUndos += count;
+        Save();
+    }
+    
+    /// <summary>Add free hints (from ads, shop, etc.)</summary>
+    public static void AddFreeHints(int count)
+    {
+        Data.freeHints += count;
+        Save();
     }
     
     /// <summary>
