@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using System.Linq;
 
 public class LevelLoader : MonoBehaviour
 {
@@ -110,18 +111,52 @@ public class LevelLoader : MonoBehaviour
     
     private int GetStackHeightFromLevel(LevelDataSO level)
     {
-        // Total capacity = ground floor + movable floors
-        int maxHeight = 3;
+        // Runtime uses MOVABLE floor capacity.
+        // We infer it robustly from the level content because shuffled states
+        // can hide the original full stack size in any single slot.
+        int maxMovableFromSlot = 1;
+        Dictionary<BuildingStyleSO, int> stylePieceCounts = new();
+
         foreach (var slot in level.slots)
         {
             if (!slot.isLocked && slot.floorStyles != null)
             {
-                int totalFloors = slot.floorStyles.Count;
-                if (slot.buildingStyle != null) totalFloors++; // ground floor counts now
-                maxHeight = Mathf.Max(maxHeight, totalFloors);
+                maxMovableFromSlot = Mathf.Max(maxMovableFromSlot, slot.floorStyles.Count);
+
+                // Count all pieces by style (ground + movable). In generated levels,
+                // each style total is (movableCapacity + 1 ground), so this recovers
+                // capacity even when no single slot is currently full.
+                if (slot.buildingStyle != null)
+                {
+                    if (!stylePieceCounts.ContainsKey(slot.buildingStyle))
+                        stylePieceCounts[slot.buildingStyle] = 0;
+                    stylePieceCounts[slot.buildingStyle]++;
+                }
+
+                for (int i = 0; i < slot.floorStyles.Count; i++)
+                {
+                    var style = slot.floorStyles[i];
+                    if (style == null) continue;
+                    if (!stylePieceCounts.ContainsKey(style))
+                        stylePieceCounts[style] = 0;
+                    stylePieceCounts[style]++;
+                }
             }
         }
-        return maxHeight;
+
+        int inferredFromStyleTotals = 0;
+        if (stylePieceCounts.Count > 0)
+        {
+            int maxPiecesOfAnyStyle = stylePieceCounts.Values.Max();
+            inferredFromStyleTotals = Mathf.Max(0, maxPiecesOfAnyStyle - 1); // subtract ground
+        }
+
+        int resolved = Mathf.Max(maxMovableFromSlot, inferredFromStyleTotals);
+
+        // Safe fallback for malformed/custom levels
+        if (resolved <= 0) resolved = 3;
+
+        return resolved;
     }
 
     private void SpawnCrane(Vector2Int gridPos, float offset)

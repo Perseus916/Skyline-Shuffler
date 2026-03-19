@@ -93,6 +93,10 @@ public class GameplayManager : MonoBehaviour
     // Hint system
     private List<MoveStep> solutionSteps;
     private int nextHintIndex;
+
+    // Win-condition requirements derived from level data
+    // styleName -> required movable floors that must end up on a single grounded stack
+    private Dictionary<string, int> requiredMovableByStyle = new();
     
     private void Start()
     {
@@ -109,13 +113,23 @@ public class GameplayManager : MonoBehaviour
         allStacks = stacks;
         moveCount = 0;
         moveLimit = levelData.playerMoveLimit;
-        stackHeight = maxStackHeight;
+        stackHeight = ResolveMovableStackHeight(stacks, maxStackHeight);
+        foreach (var stack in allStacks)
+        {
+            if (stack != null)
+            {
+                stack.SetMaxStackHeight(stackHeight);
+                stack.ForceIncompleteState();
+            }
+        }
         levelComplete = false;
         selectedStack = null;
         isPressing = false;
         
         currentLevelNumber = levelNumber;
         optimalMoves = levelData.optimalMoves;
+
+        BuildRequiredStyleCounts(levelData);
         
         // Undo/Hint reset
         undoStack.Clear();
@@ -130,7 +144,7 @@ public class GameplayManager : MonoBehaviour
         // Save initial state
         SaveInProgressState();
         
-        Debug.Log($"<color=cyan>Level {currentLevelNumber} initialized. Optimal: {optimalMoves}, Limit: {moveLimit}, Stacks: {allStacks.Count}</color>");
+        Debug.Log($"<color=cyan>Level {currentLevelNumber} initialized. Optimal: {optimalMoves}, Limit: {moveLimit}, Capacity: {stackHeight}, Stacks: {allStacks.Count}</color>");
     }
     
     /// <summary>
@@ -143,13 +157,23 @@ public class GameplayManager : MonoBehaviour
         allStacks = stacks;
         moveCount = savedState.moveCount;
         moveLimit = levelData.playerMoveLimit;
-        stackHeight = maxStackHeight;
+        stackHeight = ResolveMovableStackHeight(stacks, maxStackHeight);
+        foreach (var stack in allStacks)
+        {
+            if (stack != null)
+            {
+                stack.SetMaxStackHeight(stackHeight);
+                stack.ForceIncompleteState();
+            }
+        }
         levelComplete = false;
         selectedStack = null;
         isPressing = false;
         
         currentLevelNumber = levelNumber;
         optimalMoves = levelData.optimalMoves;
+
+        BuildRequiredStyleCounts(levelData);
         
         // Undo/Hint reset (can't undo moves from before save)
         undoStack.Clear();
@@ -164,7 +188,45 @@ public class GameplayManager : MonoBehaviour
         OnHintCountChanged?.Invoke(SaveSystem.GetFreeHints());
         OnCoinsChanged?.Invoke(SaveSystem.GetCoins());
         
-        Debug.Log($"<color=green>Level {currentLevelNumber} RESTORED at move {moveCount}/{moveLimit}</color>");
+        Debug.Log($"<color=green>Level {currentLevelNumber} RESTORED at move {moveCount}/{moveLimit} (Capacity: {stackHeight})</color>");
+    }
+
+    /// <summary>
+    /// Resolve movable-floor capacity for this level.
+    /// Uses a safe max of loader-provided value and style-frequency inference from spawned stacks.
+    /// </summary>
+    private int ResolveMovableStackHeight(List<BuildingStack> stacks, int fallback)
+    {
+        int inferred = 0;
+        Dictionary<string, int> movableStyleCounts = new();
+
+        if (stacks != null)
+        {
+            foreach (var stack in stacks)
+            {
+                if (stack == null) continue;
+
+                var names = stack.GetFloorStyleNames();
+                int start = Mathf.Clamp(stack.GroundFloorCount, 0, names.Count);
+
+                for (int i = start; i < names.Count; i++)
+                {
+                    string styleName = names[i];
+                    if (string.IsNullOrEmpty(styleName)) continue;
+
+                    if (!movableStyleCounts.ContainsKey(styleName))
+                        movableStyleCounts[styleName] = 0;
+
+                    movableStyleCounts[styleName]++;
+                }
+            }
+        }
+
+        foreach (var kv in movableStyleCounts)
+            inferred = Mathf.Max(inferred, kv.Value);
+
+        int resolved = Mathf.Max(fallback, inferred);
+        return resolved > 0 ? resolved : 3;
     }
     
     private void Update()
@@ -398,11 +460,8 @@ public class GameplayManager : MonoBehaviour
     
     private void CheckWinCondition()
     {
-        foreach (var stack in allStacks)
-        {
-            if (!stack.IsComplete())
-                return;
-        }
+        if (!IsLevelSolvedStrict())
+            return;
         
         // All stacks complete!
         levelComplete = true;
@@ -416,6 +475,108 @@ public class GameplayManager : MonoBehaviour
         {
             GameManager.Instance.OnLevelComplete(currentLevelNumber, moveCount, optimalMoves);
         }
+    }
+
+    /// <summary>
+    /// Build strict win requirements from authored level data.
+    /// For each style, count how many movable pieces exist in the puzzle.
+    /// </summary>
+    private void BuildRequiredStyleCounts(LevelDataSO levelData)
+    {
+        requiredMovableByStyle.Clear();
+
+        if (levelData == null || levelData.slots == null) return;
+
+        foreach (var slot in levelData.slots)
+        {
+            if (slot == null || slot.isLocked || slot.floorStyles == null) continue;
+
+            for (int i = 0; i < slot.floorStyles.Count; i++)
+            {
+                var style = slot.floorStyles[i];
+                if (style == null || string.IsNullOrEmpty(style.buildingName)) continue;
+
+                if (!requiredMovableByStyle.ContainsKey(style.buildingName))
+                    requiredMovableByStyle[style.buildingName] = 0;
+
+                requiredMovableByStyle[style.buildingName]++;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Strict solved-state check:
+    /// 1) For each style, exactly one GROUNDED stack contains all movable floors for that style.
+    /// 2) Any other stack must have zero movable floors.
+    /// This prevents premature completion when a block is still left to place.
+    /// </summary>
+    private bool IsLevelSolvedStrict()
+    {
+        // Fallback for malformed/custom levels with no style data
+        if (requiredMovableByStyle == null || requiredMovableByStyle.Count == 0)
+        {
+            foreach (var stack in allStacks)
+            {
+                if (!stack.IsComplete())
+                    return false;
+            }
+            return true;
+        }
+
+        HashSet<BuildingStack> matchedSolvedStacks = new();
+
+        foreach (var kv in requiredMovableByStyle)
+        {
+            string styleName = kv.Key;
+            int requiredMovable = kv.Value;
+
+            List<BuildingStack> matchingStacks = new();
+
+            foreach (var stack in allStacks)
+            {
+                if (stack == null) continue;
+                if (stack.GroundFloorCount <= 0) continue; // must be a grounded building
+
+                var names = stack.GetFloorStyleNames();
+                if (names == null || names.Count == 0) continue;
+
+                // Must have correct total count (ground + all movable of that style)
+                if (stack.MovableFloorCount != requiredMovable) continue;
+                if (names.Count != stack.GroundFloorCount + requiredMovable) continue;
+
+                // Ground and all movables must be this style
+                bool allSame = true;
+                for (int i = 0; i < names.Count; i++)
+                {
+                    if (names[i] != styleName)
+                    {
+                        allSame = false;
+                        break;
+                    }
+                }
+
+                if (allSame)
+                    matchingStacks.Add(stack);
+            }
+
+            // Must be exactly one final stack per style
+            if (matchingStacks.Count != 1)
+                return false;
+
+            matchedSolvedStacks.Add(matchingStacks[0]);
+        }
+
+        // Any stack not used as a final style stack must be empty of movable floors
+        foreach (var stack in allStacks)
+        {
+            if (stack == null) continue;
+            if (matchedSolvedStacks.Contains(stack)) continue;
+
+            if (stack.MovableFloorCount > 0)
+                return false;
+        }
+
+        return true;
     }
     
     // ========================================

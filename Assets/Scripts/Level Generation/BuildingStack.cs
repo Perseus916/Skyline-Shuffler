@@ -98,12 +98,18 @@ public class BuildingStack : MonoBehaviour
                 floorIndex++;
             }
         }
+
+        // Start-of-level baseline: stacks should not be visually/logic-locked as completed.
+        // Completion is earned during gameplay moves.
+        isCompleted = false;
+        SetCompletionVisuals(false);
         
         Debug.Log($"<color=cyan>Stack initialized: {floors.Count} total floors ({groundFloorCount} ground, {MovableFloorCount} movable)</color>");
     }
     
     /// <summary>
-    /// Set the max stack height (total floors including ground)
+    /// Set max MOVABLE floor capacity for this stack.
+    /// Ground floor (if present) is separate and does not consume this limit.
     /// </summary>
     public void SetMaxStackHeight(int height)
     {
@@ -139,15 +145,15 @@ public class BuildingStack : MonoBehaviour
     
     /// <summary>
     /// Check if stack can receive a floor of the given style.
-    /// Rules: not full, not completed, and top must match OR stack has no movable floors.
+    /// Rules: not full (movable capacity), not completed, and top must match OR stack has no movable floors.
     /// </summary>
     public bool CanReceiveFloor(int maxHeight, BuildingStyleSO incomingStyle = null)
     {
         // Completed stacks are locked
         if (isCompleted) return false;
         
-        // Check total capacity (ground + movable)
-        if (floors.Count >= maxHeight) return false;
+        // Check movable capacity (ground does NOT count)
+        if (MovableFloorCount >= maxHeight) return false;
         
         // Same-type rule: check against TOP floor only
         // If stack only has ground floor or is empty → any type can be placed
@@ -319,20 +325,26 @@ public class BuildingStack : MonoBehaviour
     
     /// <summary>
     /// Complete = FULL (at max capacity) AND all floors are the same type.
+    /// Only grounded stacks can be truly complete/locked.
     /// No "goal style" needed — just checks uniformity.
     /// Empty stacks (no floors at all) count as satisfied for win condition.
     /// Stacks with only ground floor count as satisfied (building is "vacant").
     /// </summary>
     public bool IsComplete()
     {
+        // Temporary staging stacks (no ground) should never lock as complete.
+        // They are only "satisfied" when empty.
+        if (groundFloorCount == 0)
+            return MovableFloorCount == 0;
+
         // Empty = satisfied for win condition
         if (floors.Count == 0) return true;
         
         // Only ground floor = vacant building, satisfied
         if (floors.Count <= groundFloorCount) return true;
         
-        // Must be at max capacity to be truly "complete"
-        if (floors.Count < maxStackHeight) return false;
+        // Must be at movable capacity to be truly "complete"
+        if (MovableFloorCount < maxStackHeight) return false;
         
         // All floors (including ground) must be the same type
         BuildingStyleSO firstStyle = floorStyleData[0];
@@ -351,6 +363,17 @@ public class BuildingStack : MonoBehaviour
     /// </summary>
     private void CheckCompletion()
     {
+        // No-ground stacks are temporary holding slots and must stay movable.
+        if (groundFloorCount == 0)
+        {
+            if (isCompleted)
+            {
+                isCompleted = false;
+                SetCompletionVisuals(false);
+            }
+            return;
+        }
+
         // Don't lock empty or ground-only stacks
         if (floors.Count <= groundFloorCount) return;
         
@@ -367,6 +390,15 @@ public class BuildingStack : MonoBehaviour
             isCompleted = false;
             SetCompletionVisuals(false);
         }
+    }
+
+    /// <summary>
+    /// Force this stack into non-completed state (used at level start/restore).
+    /// </summary>
+    public void ForceIncompleteState()
+    {
+        isCompleted = false;
+        SetCompletionVisuals(false);
     }
     
     /// <summary>
