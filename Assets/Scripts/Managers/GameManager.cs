@@ -187,7 +187,7 @@ public class GameManager : MonoBehaviour
                 Debug.LogWarning("Failed to parse in-progress state, starting fresh");
             }
             
-            if (savedState != null)
+            if (savedState != null && ShouldResumeSavedState(savedState, level))
             {
                 // Guard against stale/incompatible snapshots after level/rule updates.
                 // We do not resume zero-move snapshots; those are effectively equivalent
@@ -211,6 +211,11 @@ public class GameManager : MonoBehaviour
                 Debug.Log($"<color=green>Resuming Level {level} from saved state</color>");
                 return;
             }
+
+            // Saved state is stale/incompatible - start fresh on the same level
+            SaveSystem.ClearInProgressGame();
+            PlayLevel(level);
+            return;
         }
         
         // No in-progress game — start next level
@@ -219,6 +224,7 @@ public class GameManager : MonoBehaviour
     }
 
     /// <summary>
+<<<<<<< Updated upstream
     /// Basic compatibility validation for an in-progress snapshot.
     /// Prevents restoring stale data after content/rule updates.
     /// </summary>
@@ -242,6 +248,26 @@ public class GameManager : MonoBehaviour
         if (savedState.stacks == null || savedState.stacks.Count != playableCount)
             return false;
 
+=======
+    /// Guard against stale or incompatible in-progress snapshots.
+    /// We intentionally skip resume for zero-move snapshots and malformed states.
+    /// </summary>
+    private bool ShouldResumeSavedState(LevelStateData savedState, int level)
+    {
+        if (savedState == null) return false;
+        if (savedState.levelNumber != level) return false;
+        if (savedState.moveCount <= 0) return false;
+        if (savedState.stacks == null || savedState.stacks.Count == 0) return false;
+
+        for (int i = 0; i < savedState.stacks.Count; i++)
+        {
+            var stack = savedState.stacks[i];
+            if (stack == null) return false;
+            if (stack.stackIndex < 0) return false;
+            if (stack.floorStyleNames == null) return false;
+        }
+
+>>>>>>> Stashed changes
         return true;
     }
     

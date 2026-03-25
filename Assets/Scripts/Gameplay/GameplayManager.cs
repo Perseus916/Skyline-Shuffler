@@ -448,8 +448,13 @@ public class GameplayManager : MonoBehaviour
     {
         foreach (var stack in allStacks)
         {
+<<<<<<< Updated upstream
             if (!stack.IsComplete())
                 return;
+=======
+            if (stack == null) continue;
+            if (!stack.IsComplete()) return;
+>>>>>>> Stashed changes
         }
         
         // All stacks complete!
