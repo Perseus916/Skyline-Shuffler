@@ -20,6 +20,7 @@ public class GameplayUI : MonoBehaviour
     [Header("Buttons")]
     [SerializeField] private Button pauseButton;
     [SerializeField] private Button homeButton;
+    [SerializeField] private Button restartButton;
     [SerializeField] private Button undoButton;
     [SerializeField] private Button hintButton;
     
@@ -47,11 +48,13 @@ public class GameplayUI : MonoBehaviour
         
         pauseButton?.onClick.RemoveAllListeners();
         homeButton?.onClick.RemoveAllListeners();
+        restartButton?.onClick.RemoveAllListeners();
         undoButton?.onClick.RemoveAllListeners();
         hintButton?.onClick.RemoveAllListeners();
         
         pauseButton?.onClick.AddListener(OnPauseClicked);
         homeButton?.onClick.AddListener(OnHomeClicked);
+        restartButton?.onClick.AddListener(OnRestartClicked);
         undoButton?.onClick.AddListener(OnUndoClicked);
         hintButton?.onClick.AddListener(OnHintClicked);
         
@@ -160,6 +163,12 @@ public class GameplayUI : MonoBehaviour
     {
         if (GameManager.Instance != null)
             GameManager.Instance.ShowHomeScreen();
+    }
+
+    private void OnRestartClicked()
+    {
+        if (GameManager.Instance != null)
+            GameManager.Instance.ReplayLevel();
     }
     
     private void OnUndoClicked()

@@ -189,6 +189,16 @@ public class GameManager : MonoBehaviour
             
             if (savedState != null)
             {
+                // Guard against stale/incompatible snapshots after level/rule updates.
+                // We do not resume zero-move snapshots; those are effectively equivalent
+                // to a fresh start and can preserve outdated layouts.
+                if (!ShouldResumeSavedState(levelData, savedState))
+                {
+                    SaveSystem.ClearInProgressGame();
+                    PlayLevel(level);
+                    return;
+                }
+
                 SelectedLevel = level;
                 
                 HideAllPanels();
@@ -206,6 +216,33 @@ public class GameManager : MonoBehaviour
         // No in-progress game — start next level
         int nextLevel = Mathf.Max(1, SaveSystem.Data.currentLevel);
         PlayLevel(nextLevel);
+    }
+
+    /// <summary>
+    /// Basic compatibility validation for an in-progress snapshot.
+    /// Prevents restoring stale data after content/rule updates.
+    /// </summary>
+    private bool ShouldResumeSavedState(LevelDataSO levelData, LevelStateData savedState)
+    {
+        if (levelData == null || savedState == null) return false;
+
+        // Zero-move snapshots are equivalent to a fresh load and can be stale.
+        if (savedState.moveCount <= 0) return false;
+
+        // Quick structural check: same number of playable stacks.
+        int playableCount = 0;
+        if (levelData.slots != null)
+        {
+            foreach (var slot in levelData.slots)
+            {
+                if (slot != null && !slot.isLocked) playableCount++;
+            }
+        }
+
+        if (savedState.stacks == null || savedState.stacks.Count != playableCount)
+            return false;
+
+        return true;
     }
     
     /// <summary>
