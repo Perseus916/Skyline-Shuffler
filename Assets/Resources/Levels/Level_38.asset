@@ -43,10 +43,7 @@ MonoBehaviour:
     buildingStyle: {fileID: 0}
     floorStyles:
     - {fileID: 11400000, guid: 976d589237c5df045869c63a8259f877, type: 2}
-<<<<<<< Updated upstream
-=======
     - {fileID: 11400000, guid: 7e580cebe32edbf46b15ffc78d1445cc, type: 2}
->>>>>>> Stashed changes
     - {fileID: 11400000, guid: 09526e8f34fcf33408363ca6da763f18, type: 2}
   - gridPos: {x: 0, y: 0}
     isLocked: 1
@@ -67,17 +64,6 @@ MonoBehaviour:
   - fromGridPos: {x: 2, y: 1}
     toGridPos: {x: 1, y: 1}
   - fromGridPos: {x: 2, y: 1}
-<<<<<<< Updated upstream
-    toGridPos: {x: 2, y: 2}
-  - fromGridPos: {x: 2, y: 1}
-    toGridPos: {x: 0, y: 1}
-  optimalMoves: 3
-  playerMoveLimit: 55
-  tier: 2
-  cognitiveComplexity: 10
-  maxBlockingDepth: 0
-  contaminationRatio: 0
-=======
     toGridPos: {x: 0, y: 1}
   - fromGridPos: {x: 2, y: 1}
     toGridPos: {x: 2, y: 2}
@@ -87,7 +73,6 @@ MonoBehaviour:
   cognitiveComplexity: 6
   maxBlockingDepth: 1
   contaminationRatio: 0.25
->>>>>>> Stashed changes
   perfectClearBonus: 14
   isBreatherLevel: 0
   isMilestone: 0

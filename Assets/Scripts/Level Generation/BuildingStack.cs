@@ -149,18 +149,6 @@ public class BuildingStack : MonoBehaviour
     /// </summary>
     public bool CanReceiveFloor(int maxHeight, BuildingStyleSO incomingStyle = null)
     {
-<<<<<<< Updated upstream
-        // Design rule: every stack should have the same TOTAL capacity.
-        // `maxHeight` is movable capacity for grounded stacks (total = ground + movable).
-        // No-ground stacks therefore get +1 movable slot to match total height.
-        int movableCapacity = maxHeight + (groundFloorCount == 0 ? 1 : 0);
-
-        // Check movable capacity (ground does NOT count)
-        if (MovableFloorCount >= movableCapacity) return false;
-        
-        // Same-type rule: check against TOP MOVABLE floor only.
-        // If stack has no movable floors (ground-only or fully empty) → any type can be placed.
-=======
         // Completed stacks are locked
         if (isCompleted) return false;
         
@@ -172,7 +160,6 @@ public class BuildingStack : MonoBehaviour
         
         // Same-type rule applies only when destination already has movable floors.
         // If stack is empty or has only ground floor, any style may be placed.
->>>>>>> Stashed changes
         if (incomingStyle != null && MovableFloorCount > 0)
         {
             BuildingStyleSO topStyle = floorStyleData[floorStyleData.Count - 1];

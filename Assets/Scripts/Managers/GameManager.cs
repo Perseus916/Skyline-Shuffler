@@ -189,16 +189,6 @@ public class GameManager : MonoBehaviour
             
             if (savedState != null && ShouldResumeSavedState(savedState, level))
             {
-                // Guard against stale/incompatible snapshots after level/rule updates.
-                // We do not resume zero-move snapshots; those are effectively equivalent
-                // to a fresh start and can preserve outdated layouts.
-                if (!ShouldResumeSavedState(levelData, savedState))
-                {
-                    SaveSystem.ClearInProgressGame();
-                    PlayLevel(level);
-                    return;
-                }
-
                 SelectedLevel = level;
                 
                 HideAllPanels();
@@ -224,31 +214,6 @@ public class GameManager : MonoBehaviour
     }
 
     /// <summary>
-<<<<<<< Updated upstream
-    /// Basic compatibility validation for an in-progress snapshot.
-    /// Prevents restoring stale data after content/rule updates.
-    /// </summary>
-    private bool ShouldResumeSavedState(LevelDataSO levelData, LevelStateData savedState)
-    {
-        if (levelData == null || savedState == null) return false;
-
-        // Zero-move snapshots are equivalent to a fresh load and can be stale.
-        if (savedState.moveCount <= 0) return false;
-
-        // Quick structural check: same number of playable stacks.
-        int playableCount = 0;
-        if (levelData.slots != null)
-        {
-            foreach (var slot in levelData.slots)
-            {
-                if (slot != null && !slot.isLocked) playableCount++;
-            }
-        }
-
-        if (savedState.stacks == null || savedState.stacks.Count != playableCount)
-            return false;
-
-=======
     /// Guard against stale or incompatible in-progress snapshots.
     /// We intentionally skip resume for zero-move snapshots and malformed states.
     /// </summary>
@@ -267,7 +232,6 @@ public class GameManager : MonoBehaviour
             if (stack.floorStyleNames == null) return false;
         }
 
->>>>>>> Stashed changes
         return true;
     }
     
