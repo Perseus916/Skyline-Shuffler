@@ -13,6 +13,6 @@ MonoBehaviour:
   m_Name: Temp 3
   m_EditorClassIdentifier: Assembly-CSharp::BuildingStyleSO
   buildingName: Temp 3
-  groundPrefab: {fileID: 4273570526736498472, guid: 14510c788e07dc849b0d809dc5e17816, type: 3}
-  floorPrefab: {fileID: 4273570526736498472, guid: 14510c788e07dc849b0d809dc5e17816, type: 3}
+  groundPrefab: {fileID: 118418390768034986, guid: 1bb7d679d31e5924590f6259ac8987c5, type: 3}
+  floorPrefab: {fileID: 1700267411381699376, guid: 750a5812801308e49b95ba2eb95e86fb, type: 3}
   completedPrefab: {fileID: 1082229216076602184, guid: 7d6fc1b262c276b4e87d0e862e44d8c7, type: 3}
