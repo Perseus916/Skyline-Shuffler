@@ -23,6 +23,10 @@ public class BuildingStack : MonoBehaviour
     private Vector3 compensatedScale;
     private int maxStackHeight;
     
+    // Grid position tracking for hints
+    private Vector2Int gridPosition;
+    public Vector2Int GridPosition => gridPosition;
+    
     // Completion state
     private bool isCompleted;
     public bool IsCompleted => isCompleted;
@@ -116,6 +120,14 @@ public class BuildingStack : MonoBehaviour
         maxStackHeight = height;
     }
     
+    /// <summary>
+    /// Set this stack's grid position for hint system tracking.
+    /// </summary>
+    public void SetGridPosition(Vector2Int pos)
+    {
+        gridPosition = pos;
+    }
+    
     // ========================================
     // GAMEPLAY API
     // ========================================
@@ -141,6 +153,15 @@ public class BuildingStack : MonoBehaviour
             names.Add(style != null ? style.buildingName : "");
         }
         return names;
+    }
+
+    /// <summary>
+    /// Return the actual BuildingStyleSO objects for each floor (bottom-to-top).
+    /// Used by the runtime hint/solver to snapshot the current state.
+    /// </summary>
+    public List<BuildingStyleSO> GetFloorStyles()
+    {
+        return new List<BuildingStyleSO>(floorStyleData);
     }
     
     /// <summary>

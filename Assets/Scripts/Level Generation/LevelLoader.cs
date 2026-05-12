@@ -192,6 +192,7 @@ public class LevelLoader : MonoBehaviour
             // All playable slots (with or without floors) need BuildingStack component
             BuildingStack stack = foundation.AddComponent<BuildingStack>();
             stack.SetMaxStackHeight(currentStackHeight);
+            stack.SetGridPosition(data.gridPos);
             
             if (data.floorStyles != null && data.floorStyles.Count > 0)
             {

@@ -73,6 +73,7 @@ public class GameplayManager : MonoBehaviour
     // Level info
     private int currentLevelNumber;
     private int optimalMoves;
+    private LevelDataSO currentLevelData;
     
     // Input tracking
     private bool isPressing;
@@ -93,6 +94,8 @@ public class GameplayManager : MonoBehaviour
     // Hint system
     private List<MoveStep> solutionSteps;
     private int nextHintIndex;
+    private bool unlimitedHintsEnabled; // Debug mode for unlimited hints
+    private Dictionary<Vector2Int, BuildingStack> gridToStackMap = new(); // Maps grid positions to stacks
     
     private void Start()
     {
@@ -106,6 +109,7 @@ public class GameplayManager : MonoBehaviour
     /// </summary>
     public void InitializeLevel(LevelDataSO levelData, List<BuildingStack> stacks, int maxStackHeight, int levelNumber)
     {
+        currentLevelData = levelData;
         allStacks = stacks;
         moveCount = 0;
         moveLimit = levelData.playerMoveLimit;
@@ -130,6 +134,9 @@ public class GameplayManager : MonoBehaviour
         solutionSteps = levelData.solvingSteps != null ? new List<MoveStep>(levelData.solvingSteps) : new();
         nextHintIndex = 0;
         
+        // Build grid-to-stack mapping for hints
+        BuildGridToStackMap();
+        
         OnMoveCountChanged?.Invoke(moveCount, moveLimit);
         OnUndoCountChanged?.Invoke(SaveSystem.GetFreeUndos());
         OnHintCountChanged?.Invoke(SaveSystem.GetFreeHints());
@@ -148,6 +155,7 @@ public class GameplayManager : MonoBehaviour
     public void RestoreFromSave(LevelDataSO levelData, List<BuildingStack> stacks, int maxStackHeight, 
                                  int levelNumber, LevelStateData savedState)
     {
+        currentLevelData = levelData;
         allStacks = stacks;
         moveCount = savedState.moveCount;
         moveLimit = levelData.playerMoveLimit;
@@ -171,6 +179,9 @@ public class GameplayManager : MonoBehaviour
         undoStack.Clear();
         solutionSteps = levelData.solvingSteps != null ? new List<MoveStep>(levelData.solvingSteps) : new();
         nextHintIndex = 0;
+        
+        // Build grid-to-stack mapping for hints
+        BuildGridToStackMap();
         
         // Rearrange floors to match saved state
         RearrangeStacksFromState(savedState);
@@ -224,6 +235,18 @@ public class GameplayManager : MonoBehaviour
     private void Update()
     {
         if (levelComplete || isAnimating) return;
+        
+        // Check for 'H' key to toggle unlimited hints
+        var keyboard = Keyboard.current;
+        if (keyboard != null && keyboard.hKey.wasPressedThisFrame)
+        {
+            unlimitedHintsEnabled = true;
+            Debug.Log("<color=yellow>H pressed: unlimited hints enabled and showing hint.</color>");
+            if (!TryShowHint())
+            {
+                Debug.LogWarning("<color=red>H pressed but no hint could be shown.</color>");
+            }
+        }
         
         // Get current pointer (works for mouse and touch)
         var pointer = Pointer.current;
@@ -644,6 +667,61 @@ public class GameplayManager : MonoBehaviour
     }
     
     // ========================================
+    // HELPER METHODS
+    // ========================================
+    
+    /// <summary>
+    /// Build a mapping from grid positions to BuildingStack objects for hint system.
+    /// </summary>
+    private void BuildGridToStackMap()
+    {
+        gridToStackMap.Clear();
+        foreach (var stack in allStacks)
+        {
+            if (stack != null)
+            {
+                gridToStackMap[stack.GridPosition] = stack;
+            }
+        }
+        Debug.Log($"<color=cyan>Grid-to-stack map built with {gridToStackMap.Count} stacks</color>");
+    }
+
+    /// <summary>
+    /// Snapshot the current gameplay stacks into SlotData list for the solver.
+    /// Preserves original slot target styles from `currentLevelData` when available.
+    /// </summary>
+    private List<SlotData> BuildCurrentLevelState()
+    {
+        var slots = new List<SlotData>();
+
+        foreach (var stack in allStacks)
+        {
+            if (stack == null) continue;
+
+            var slot = new SlotData();
+            slot.gridPos = stack.GridPosition;
+            slot.isLocked = false;
+            slot.isEmpty = stack.IsEmpty;
+            slot.floorStyles = stack.GetFloorStyles() ?? new List<BuildingStyleSO>();
+
+            // If we have original level data, copy the goal buildingStyle for this grid
+            if (currentLevelData != null && currentLevelData.slots != null)
+            {
+                var orig = currentLevelData.slots.FirstOrDefault(s => s.gridPos == slot.gridPos);
+                if (orig != null)
+                {
+                    slot.buildingStyle = orig.buildingStyle;
+                    slot.isLocked = orig.isLocked;
+                }
+            }
+
+            slots.Add(slot);
+        }
+
+        return slots;
+    }
+    
+    // ========================================
     // HINT SYSTEM
     // ========================================
     
@@ -653,68 +731,108 @@ public class GameplayManager : MonoBehaviour
     /// </summary>
     public bool TryShowHint()
     {
+        Debug.Log("<color=cyan>TryShowHint called</color>");
+
         if (levelComplete) return false;
-        
-        // Find a valid hint from current state
+
         BuildingStack hintFrom = null;
         BuildingStack hintTo = null;
-        
-        foreach (var from in allStacks)
+
+        // 1) Runtime solver-first: build current slots and ask PuzzleSolver for shortest move
+        try
         {
-            if (from.MovableFloorCount == 0) continue;
-            
-            var topStyle = from.GetTopFloorStyle();
-            if (topStyle == null) continue;
-            
-            foreach (var to in allStacks)
+            var currentSlots = BuildCurrentLevelState();
+            var solver = new PuzzleSolver(stackHeight);
+            var solution = solver.FindShortestSolution(currentSlots, 100);
+
+            if (solution != null && solution.Count > 0)
             {
-                if (to == from) continue;
-                if (!to.CanReceiveFloor(stackHeight, topStyle)) continue;
-                
-                hintFrom = from;
-                hintTo = to;
-                
-                // Prefer targets that already have matching floors
-                if (to.MovableFloorCount > 0)
-                    goto FoundHint;
+                MoveStep next = solution[0];
+                gridToStackMap.TryGetValue(next.fromGridPos, out hintFrom);
+                gridToStackMap.TryGetValue(next.toGridPos, out hintTo);
+                if (hintFrom != null && hintTo != null)
+                {
+                    Debug.Log($"<color=cyan>Runtime solver hint: {next.fromGridPos} -> {next.toGridPos}</color>");
+                }
+                else
+                {
+                    Debug.Log("<color=yellow>Runtime solver produced step but mapping failed.</color>");
+                }
+            }
+            else
+            {
+                Debug.Log("<color=yellow>Runtime solver found no move, falling back to precomputed/fallback.</color>");
             }
         }
-        
-        FoundHint:
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"Error running runtime solver: {ex}");
+        }
+
+        // 2) If runtime solver didn't yield a valid mapping, try precomputed solution steps
+        if (hintFrom == null || hintTo == null)
+        {
+            if (solutionSteps != null && solutionSteps.Count > 0)
+            {
+                for (int i = nextHintIndex; i < solutionSteps.Count; i++)
+                {
+                    MoveStep step = solutionSteps[i];
+                    if (gridToStackMap.TryGetValue(step.fromGridPos, out BuildingStack fromStack) &&
+                        gridToStackMap.TryGetValue(step.toGridPos, out BuildingStack toStack))
+                    {
+                        if (fromStack.MovableFloorCount > 0)
+                        {
+                            var topStyle = fromStack.GetTopFloorStyle();
+                            if (topStyle != null && toStack.CanReceiveFloor(stackHeight, topStyle))
+                            {
+                                hintFrom = fromStack;
+                                hintTo = toStack;
+                                nextHintIndex = i + 1;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if (hintFrom == null || hintTo == null)
         {
             Debug.Log("<color=red>No valid hint available!</color>");
             return false;
         }
         
-        // Check consumable availability
-        bool hasFree = SaveSystem.UseFreeHint();
-        if (!hasFree)
+        // Check consumable availability (skip if unlimited hints enabled)
+        if (!unlimitedHintsEnabled)
         {
-            if (!SaveSystem.SpendCoins(150))
+            bool hasFree = SaveSystem.UseFreeHint();
+            if (!hasFree)
             {
-                // Offer ad as last resort
-                if (AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady())
+                if (!SaveSystem.SpendCoins(150))
                 {
-                    AdManager.Instance.ShowFreeHintAd(() =>
+                    // Offer ad as last resort
+                    if (AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady())
                     {
-                        SaveSystem.AddFreeHints(1);
-                        OnHintCountChanged?.Invoke(SaveSystem.GetFreeHints());
-                        TryShowHint();
-                    });
+                        AdManager.Instance.ShowFreeHintAd(() =>
+                        {
+                            SaveSystem.AddFreeHints(1);
+                            OnHintCountChanged?.Invoke(SaveSystem.GetFreeHints());
+                            TryShowHint();
+                        });
+                    }
+                    else
+                    {
+                        Debug.Log("<color=red>No hints available! No free hints, coins, or ads.</color>");
+                    }
+                    return false;
                 }
-                else
-                {
-                    Debug.Log("<color=red>No hints available! No free hints, coins, or ads.</color>");
-                }
-                return false;
+                OnCoinsChanged?.Invoke(SaveSystem.GetCoins());
             }
-            OnCoinsChanged?.Invoke(SaveSystem.GetCoins());
         }
         
         // Highlight the hint stacks
-        hintFrom.FlashColor(new Color(0.3f, 1f, 0.3f, 1f), 1.0f); // Green flash on source
-        hintTo.FlashColor(new Color(0.3f, 0.7f, 1f, 1f), 1.0f);   // Blue flash on target
+        hintFrom.FlashColor(new Color(0.3f, 0.7f, 1f, 1f), 1.5f); // Blue flash on source
+        hintTo.FlashColor(new Color(0.3f, 1f, 0.3f, 1f), 1.5f);   // Green flash on target
         
         OnHintCountChanged?.Invoke(SaveSystem.GetFreeHints());
         

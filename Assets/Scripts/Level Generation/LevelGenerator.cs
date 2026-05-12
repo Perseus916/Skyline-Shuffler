@@ -261,6 +261,20 @@ public class LevelGeneratorEditor : EditorWindow
             // Verify solution is actually playable
             if (VerifySolution(playableSlots, solution, stackHeight))
             {
+                // Find optimal blue→green solution
+                var solver = new PuzzleSolver(stackHeight);
+                var optimalSolution = solver.FindShortestSolution(playableSlots, targetOptimalMoves + 10);
+                
+                if (optimalSolution.Count > 0)
+                {
+                    solution = optimalSolution;
+                    Debug.Log($"Level {lvlNum}: Found optimal blue→green solution with {solution.Count} moves");
+                }
+                else
+                {
+                    Debug.LogWarning($"Level {lvlNum}: No blue→green solution found, using shuffled solution");
+                }
+                
                 break; // Valid level!
             }
             else
