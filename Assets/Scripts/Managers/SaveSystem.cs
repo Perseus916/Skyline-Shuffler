@@ -32,6 +32,7 @@ public class GameSaveData
     public int freeHints = 1;    // Start with 1 free hint
     
     // Settings
+    public float masterVolume = 1f;
     public float musicVolume = 1f;
     public float sfxVolume = 1f;
     public bool vibrationEnabled = true;
@@ -268,6 +269,21 @@ public static class SaveSystem
     public static void ResetAllProgress()
     {
         _cachedData = new GameSaveData();
+        Save();
+    }
+
+    /// <summary>
+    /// Reset only level progress, keeping coins, hints, undos, and settings.
+    /// </summary>
+    public static void ResetLevelProgressOnly()
+    {
+        Data.currentLevel = 1;
+        Data.highestUnlockedLevel = 1;
+        Data.levelProgress.Clear();
+        Data.hasInProgressGame = false;
+        Data.inProgressLevel = 0;
+        Data.inProgressState = "";
+        Data.inProgressMoves = 0;
         Save();
     }
 }

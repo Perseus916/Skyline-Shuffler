@@ -77,12 +77,21 @@ public class AudioManager : MonoBehaviour
     /// </summary>
     public void ApplySettings()
     {
+        AudioListener.volume = SaveSystem.Data.masterVolume;
+
         if (musicSource != null)
             musicSource.volume = SaveSystem.Data.musicVolume;
         if (sfxSource != null)
             sfxSource.volume = SaveSystem.Data.sfxVolume;
         if (uiSfxSource != null)
             uiSfxSource.volume = SaveSystem.Data.sfxVolume;
+    }
+
+    public void SetMasterVolume(float volume)
+    {
+        SaveSystem.Data.masterVolume = volume;
+        AudioListener.volume = volume;
+        SaveSystem.Save();
     }
     
     public void SetMusicVolume(float volume)

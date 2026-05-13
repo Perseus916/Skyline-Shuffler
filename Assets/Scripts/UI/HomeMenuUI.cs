@@ -12,6 +12,9 @@ public class HomeMenuUI : MonoBehaviour
     [SerializeField] private Button levelsButton;
     [SerializeField] private Button settingsButton;
     
+    [Header("Panels")]
+    [SerializeField] private GameObject settingsPanel;
+    
     [Header("Display")]
     [SerializeField] private TextMeshProUGUI playButtonText;
     [SerializeField] private TextMeshProUGUI totalStarsText;
@@ -63,6 +66,14 @@ public class HomeMenuUI : MonoBehaviour
     
     private void OnSettingsClicked()
     {
+        if (settingsPanel != null)
+        {
+            settingsPanel.SetActive(true);
+            if (AudioManager.Instance != null)
+                AudioManager.Instance.PlayPopupOpen();
+            return;
+        }
+
         if (GameManager.Instance != null)
             GameManager.Instance.ShowSettings();
     }

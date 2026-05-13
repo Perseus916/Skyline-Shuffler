@@ -8,6 +8,7 @@ public class SettingsUI : MonoBehaviour
 {
     [Header("Panel")]
     [SerializeField] private GameObject panel;
+    [SerializeField] private GameObject progressPanel;
     
     [Header("Audio")]
     [SerializeField] private Slider musicSlider;
@@ -15,21 +16,13 @@ public class SettingsUI : MonoBehaviour
     
     [Header("Other")]
     [SerializeField] private Toggle vibrationToggle;
-    [SerializeField] private Button resetProgressButton;
+    [SerializeField] private Button progressButton;
     [SerializeField] private Button closeButton;
-    
-    [Header("Reset Confirmation")]
-    [SerializeField] private GameObject resetConfirmPanel;
-    [SerializeField] private Button confirmResetButton;
-    [SerializeField] private Button cancelResetButton;
     
     private void OnEnable()
     {
         SetupListeners();
         LoadValues();
-        
-        if (resetConfirmPanel != null)
-            resetConfirmPanel.SetActive(false);
     }
     
     private void SetupListeners()
@@ -37,18 +30,14 @@ public class SettingsUI : MonoBehaviour
         musicSlider?.onValueChanged.RemoveAllListeners();
         sfxSlider?.onValueChanged.RemoveAllListeners();
         vibrationToggle?.onValueChanged.RemoveAllListeners();
-        resetProgressButton?.onClick.RemoveAllListeners();
+        progressButton?.onClick.RemoveAllListeners();
         closeButton?.onClick.RemoveAllListeners();
-        confirmResetButton?.onClick.RemoveAllListeners();
-        cancelResetButton?.onClick.RemoveAllListeners();
         
         musicSlider?.onValueChanged.AddListener(v => { if (GameManager.Instance) GameManager.Instance.MusicVolume = v; });
         sfxSlider?.onValueChanged.AddListener(v => { if (GameManager.Instance) GameManager.Instance.SFXVolume = v; });
         vibrationToggle?.onValueChanged.AddListener(v => { if (GameManager.Instance) GameManager.Instance.VibrationEnabled = v; });
         
-        resetProgressButton?.onClick.AddListener(() => { if (resetConfirmPanel) resetConfirmPanel.SetActive(true); });
-        cancelResetButton?.onClick.AddListener(() => { if (resetConfirmPanel) resetConfirmPanel.SetActive(false); });
-        confirmResetButton?.onClick.AddListener(ConfirmReset);
+        progressButton?.onClick.AddListener(OpenProgressPanel);
         closeButton?.onClick.AddListener(Close);
     }
     
@@ -63,18 +52,22 @@ public class SettingsUI : MonoBehaviour
     
     public void Close()
     {
+        if (panel != null)
+            panel.SetActive(false);
+
         if (GameManager.Instance != null)
             GameManager.Instance.HideSettings();
     }
     
-    private void ConfirmReset()
+    private void OpenProgressPanel()
     {
-        SaveSystem.ResetAllProgress();
-        if (resetConfirmPanel != null) resetConfirmPanel.SetActive(false);
-        Debug.Log("<color=yellow>Progress reset!</color>");
-        
-        // Go home
-        if (GameManager.Instance != null)
-            GameManager.Instance.ShowHomeScreen();
+        if (progressPanel != null)
+            progressPanel.SetActive(true);
+
+        if (panel != null)
+            panel.SetActive(false);
+
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayPopupOpen();
     }
 }
