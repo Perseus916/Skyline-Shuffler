@@ -426,7 +426,6 @@ MonoBehaviour:
   floorHeight: 1
   gameplayManager: {fileID: 96613652}
   gridContainer: {fileID: 1569156925}
-  cityContainer: {fileID: 1755788913}
 --- !u!114 &96613652
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -441,6 +440,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GameplayManager
   levelLoader: {fileID: 96613651}
   mainCamera: {fileID: 330585545}
+  outOfMovesUI: {fileID: 0}
   stackLayerMask:
     serializedVersion: 2
     m_Bits: 1
@@ -456,6 +456,15 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   OnMoveFailed:
+    m_PersistentCalls:
+      m_Calls: []
+  OnUndoCountChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  OnHintCountChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  OnCoinsChanged:
     m_PersistentCalls:
       m_Calls: []
 --- !u!4 &96613653
@@ -536,7 +545,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 12.981308
+  orthographic size: 8
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
