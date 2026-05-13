@@ -2881,7 +2881,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LevelLoader
   currentLevelData: {fileID: 0}
-  cranePrefab: {fileID: 7826178101100112778, guid: 67e42152ad7be604c8f3e1845b7ed3f0, type: 3}
+  cranePrefab: {fileID: 5641332736521979622, guid: 2ed9fc4b32c835c4380cda809b889788, type: 3}
   foundationPrefab: {fileID: 4992704214475371062, guid: 0ff4abbde3ffc3f42b6c09989500cb86, type: 3}
   gridSpacing: 3
   floorHeight: 1
