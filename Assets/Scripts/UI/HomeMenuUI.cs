@@ -62,6 +62,8 @@ public class HomeMenuUI : MonoBehaviour
     // =========================
     private void OnPlayClicked()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
         StartCoroutine(PlayButtonAnimation());
     }
 
@@ -91,6 +93,8 @@ public class HomeMenuUI : MonoBehaviour
     // =========================
     private void OnLevelsClicked()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
         StartCoroutine(LevelsButtonAnimation());
     }
 
@@ -116,6 +120,8 @@ public class HomeMenuUI : MonoBehaviour
     // =========================
     private void OnSettingsClicked()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
         StartCoroutine(SettingsButtonAnimation());
     }
 
@@ -133,11 +139,6 @@ public class HomeMenuUI : MonoBehaviour
         if (settingsPanel != null)
         {
             settingsPanel.SetActive(true);
-
-            if (AudioManager.Instance != null)
-            {
-                AudioManager.Instance.PlayPopupOpen();
-            }
 
             yield break;
         }

@@ -82,6 +82,9 @@ public class ShopUI : MonoBehaviour
     
     public void Hide()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         StopAllCoroutines();
         if (panel != null) panel.SetActive(false);
     }
@@ -119,6 +122,9 @@ public class ShopUI : MonoBehaviour
     
     private void BuyWithCoins(string itemId, int price, System.Action grantItem)
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         if (!SaveSystem.SpendCoins(price))
         {
             Debug.Log($"<color=red>Not enough coins for {itemId}!</color>");
@@ -132,6 +138,9 @@ public class ShopUI : MonoBehaviour
     
     private void OnAdForUndos()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         if (AdManager.Instance == null) return;
         
         AdManager.Instance.ShowFreeUndosAd(() =>
@@ -144,6 +153,9 @@ public class ShopUI : MonoBehaviour
     
     private void OnAdForHint()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         if (AdManager.Instance == null) return;
         
         AdManager.Instance.ShowFreeHintAd(() =>
@@ -156,6 +168,9 @@ public class ShopUI : MonoBehaviour
     
     private void OnAdForCoins()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         if (AdManager.Instance == null) return;
         
         AdManager.Instance.ShowRewardedAd("shop_coins", () =>

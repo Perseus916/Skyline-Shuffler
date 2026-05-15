@@ -52,6 +52,9 @@ public class SettingsUI : MonoBehaviour
     
     public void Close()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         if (panel != null)
             panel.SetActive(false);
 
@@ -61,13 +64,13 @@ public class SettingsUI : MonoBehaviour
     
     private void OpenProgressPanel()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         if (progressPanel != null)
             progressPanel.SetActive(true);
 
         if (panel != null)
             panel.SetActive(false);
-
-        if (AudioManager.Instance != null)
-            AudioManager.Instance.PlayPopupOpen();
     }
 }

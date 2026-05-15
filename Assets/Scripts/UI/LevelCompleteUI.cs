@@ -130,6 +130,9 @@ public class LevelCompleteUI : MonoBehaviour
     
     private void OnDoubleReward()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         if (hasDoubled || AdManager.Instance == null) return;
         
         AdManager.Instance.ShowDoubleRewardAd(() =>
@@ -156,6 +159,9 @@ public class LevelCompleteUI : MonoBehaviour
     
     private void OnNextLevel()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         Hide();
         if (GameManager.Instance != null)
             GameManager.Instance.LoadNextLevel();
@@ -163,6 +169,9 @@ public class LevelCompleteUI : MonoBehaviour
     
     private void OnReplay()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         Hide();
         if (GameManager.Instance != null)
             GameManager.Instance.ReplayLevel();
@@ -170,6 +179,9 @@ public class LevelCompleteUI : MonoBehaviour
     
     private void OnMenu()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         Hide();
         if (GameManager.Instance != null)
             GameManager.Instance.ShowLevelSelect();
