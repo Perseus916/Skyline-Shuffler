@@ -3,78 +3,133 @@ using UnityEngine.UI;
 using TMPro;
 
 /// <summary>
-/// Individual level button in the level select grid.
-/// Shows level number, stars, and locked state.
+/// Level Select Button
+/// Handles:
+/// - Locked / Unlocked state
+/// - Stars
+/// - Level Number
+/// - Button click
 /// </summary>
 public class LevelButtonUI : MonoBehaviour
 {
-    [Header("UI References")]
+    [Header("Main Button")]
     [SerializeField] private Button button;
+
+    [Header("UNLOCK SECTION")]
+    [SerializeField] private GameObject unlockRoot;
+
     [SerializeField] private TextMeshProUGUI levelNumberText;
-    [SerializeField] private GameObject[] starIcons; // 3 stars
-    [SerializeField] private GameObject lockOverlay;
-    [SerializeField] private Image backgroundImage;
-    
+
+    [Header("Stars")]
+    [SerializeField] private Image[] stars;
+
+    [SerializeField] private Color activeStarColor = Color.white;
+
+    [SerializeField] private Color inactiveStarColor = Color.black;
+
+    [SerializeField] private Image unlockBackground;
+
+    [Header("LOCK SECTION")]
+    [SerializeField] private GameObject lockRoot;
+
     [Header("Colors")]
-    [SerializeField] private Color unlockedColor = new Color(0.3f, 0.7f, 0.3f);
-    [SerializeField] private Color completedColor = new Color(0.2f, 0.5f, 0.8f);
-    [SerializeField] private Color lockedColor = new Color(0.3f, 0.3f, 0.3f);
-    
+    [SerializeField] private Color normalLevelColor = Color.white;
+
+    [SerializeField] private Color completedLevelColor = new Color(1f, 0.85f, 0.2f);
+
     private int levelNumber;
-    
-    /// <summary>
-    /// Initialize button with level data
-    /// </summary>
+
+    //========================================================
+    // SETUP
+    //========================================================
     public void Setup(int level)
     {
         levelNumber = level;
-        
-        if (levelNumberText != null)
-            levelNumberText.text = level.ToString();
-        
+
         bool isUnlocked = SaveSystem.IsLevelUnlocked(level);
+
         LevelProgress progress = SaveSystem.GetLevelProgress(level);
-        
-        // Lock overlay
-        if (lockOverlay != null)
-            lockOverlay.SetActive(!isUnlocked);
-        
-        // Button interactable
+
+        //------------------------------------
+        // SHOW / HIDE LOCK & UNLOCK SECTION
+        //------------------------------------
+        if (unlockRoot != null)
+            unlockRoot.SetActive(isUnlocked);
+
+        if (lockRoot != null)
+            lockRoot.SetActive(!isUnlocked);
+
+        //------------------------------------
+        // BUTTON INTERACTABLE
+        //------------------------------------
         if (button != null)
         {
             button.interactable = isUnlocked;
+
+            button.onClick.RemoveAllListeners();
             button.onClick.AddListener(OnClick);
         }
-        
-        // Stars
-        if (starIcons != null)
+
+        //------------------------------------
+        // LEVEL NUMBER
+        //------------------------------------
+        if (levelNumberText != null)
+            levelNumberText.text = level.ToString();
+
+        //------------------------------------
+        // STARS
+        //------------------------------------
+        SetupStars(progress.stars);
+
+        //------------------------------------
+        // COMPLETED COLOR
+        //------------------------------------
+        if (unlockBackground != null)
         {
-            for (int i = 0; i < starIcons.Length; i++)
-            {
-                if (starIcons[i] != null)
-                    starIcons[i].SetActive(i < progress.stars);
-            }
-        }
-        
-        // Background color
-        if (backgroundImage != null)
-        {
-            if (!isUnlocked)
-                backgroundImage.color = lockedColor;
-            else if (progress.completed)
-                backgroundImage.color = completedColor;
+            if (progress.completed)
+                unlockBackground.color = completedLevelColor;
             else
-                backgroundImage.color = unlockedColor;
+                unlockBackground.color = normalLevelColor;
         }
     }
-    
+
+    //========================================================
+// STARS
+//========================================================
+private void SetupStars(int starCount)
+{
+    if (stars == null || stars.Length == 0)
+    {
+        Debug.LogWarning($"[LevelButtonUI] Stars array is null or empty on {gameObject.name}");
+        return;
+    }
+
+    Debug.Log($"[LevelButtonUI] Setting {starCount} stars out of {stars.Length} on Level {levelNumber}");
+
+    for (int i = 0; i < stars.Length; i++)
+    {
+        if (stars[i] != null)
+            stars[i].color = inactiveStarColor;
+        else
+            Debug.LogWarning($"[LevelButtonUI] stars[{i}] is NULL on {gameObject.name}");
+    }
+
+    for (int i = 0; i < starCount && i < stars.Length; i++)
+    {
+        if (stars[i] != null)
+            stars[i].color = activeStarColor;
+    }
+}
+    //========================================================
+    // BUTTON CLICK
+    //========================================================
     private void OnClick()
     {
-        // Find parent LevelSelectUI and notify
-        LevelSelectUI selectUI = GetComponentInParent<LevelSelectUI>();
-        if (selectUI != null)
+        LevelSelectUI levelSelectUI = GetComponentInParent<LevelSelectUI>();
+
+        if (levelSelectUI != null)
         {
-            selectUI.OnLevelSelected(levelNumber);
+            levelSelectUI.OnLevelSelected(levelNumber);
         }
         else if (GameManager.Instance != null)
         {
