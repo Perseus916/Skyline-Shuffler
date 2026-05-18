@@ -99,6 +99,9 @@ public class ProgressSettingsUI : MonoBehaviour
 
     private void OnResetClicked()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         clearAllRequested = false;
 
         if (resetConfirmPanel != null)
@@ -111,6 +114,9 @@ public class ProgressSettingsUI : MonoBehaviour
 
     private void OnClearAllClicked()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         clearAllRequested = true;
 
         if (resetConfirmPanel != null)
@@ -123,6 +129,9 @@ public class ProgressSettingsUI : MonoBehaviour
 
     private void ConfirmReset()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         if (clearAllRequested)
         {
             // Clear everything
@@ -152,12 +161,18 @@ public class ProgressSettingsUI : MonoBehaviour
 
     private void CancelReset()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         if (resetConfirmPanel != null)
             resetConfirmPanel.SetActive(false);
     }
 
     public void Close()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         gameObject.SetActive(false);
 
         if (settingsPanel != null)

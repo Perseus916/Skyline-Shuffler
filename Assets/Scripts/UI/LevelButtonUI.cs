@@ -125,6 +125,9 @@ private void SetupStars(int starCount)
     //========================================================
     private void OnClick()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         LevelSelectUI levelSelectUI = GetComponentInParent<LevelSelectUI>();
 
         if (levelSelectUI != null)

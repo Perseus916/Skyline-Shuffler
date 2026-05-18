@@ -99,13 +99,11 @@ public class GameManager : MonoBehaviour
     public void ShowSettings()
     {
         if (settingsPanel != null) settingsPanel.SetActive(true);
-        if (AudioManager.Instance != null) AudioManager.Instance.PlayPopupOpen();
     }
     
     public void ShowShop()
     {
         if (shopUI != null) shopUI.Show();
-        if (AudioManager.Instance != null) AudioManager.Instance.PlayPopupOpen();
     }
     
     public void HideSettings()
@@ -149,6 +147,7 @@ public class GameManager : MonoBehaviour
         
         HideAllPanels();
         if (gameplayPanel != null) gameplayPanel.SetActive(true);
+        if (AudioManager.Instance != null) AudioManager.Instance.PlayGameplayMusic();
         
         // Load fresh — no saved state
         levelLoader.LoadLevel(levelData, levelNumber);
@@ -193,6 +192,7 @@ public class GameManager : MonoBehaviour
                 
                 HideAllPanels();
                 if (gameplayPanel != null) gameplayPanel.SetActive(true);
+                if (AudioManager.Instance != null) AudioManager.Instance.PlayGameplayMusic();
                 
                 // Load level layout, then restore floor positions
                 levelLoader.LoadLevelWithRestore(levelData, level, savedState);

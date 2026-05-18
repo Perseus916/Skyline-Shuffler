@@ -107,6 +107,9 @@ public class OutOfMovesUI : MonoBehaviour
     
     private void OnWatchAd()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         if (AdManager.Instance == null) return;
         
         AdManager.Instance.ShowExtraMovesAd(() =>
@@ -122,6 +125,9 @@ public class OutOfMovesUI : MonoBehaviour
     
     private void OnSpendCoins()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         if (!SaveSystem.SpendCoins(coinCostForMoves))
         {
             Debug.Log("<color=red>Not enough coins!</color>");
@@ -137,6 +143,9 @@ public class OutOfMovesUI : MonoBehaviour
     
     private void OnRestart()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
         Hide();
         if (GameManager.Instance != null)
             GameManager.Instance.ReplayLevel();
