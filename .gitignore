@@ -75,3 +75,7 @@ crashlytics-build.properties
 /[Aa]ssets/[Ss]treamingAssets/aa/*
 
 # End of https://www.toptal.com/developers/gitignore/api/unity
+
+# Ignore large scene files
+Assets/Triangularity/ColorfulCity/Scenes/All Buildings Colors.unity
+Assets/Triangularity/ColorfulCity/Scenes/Buildings Showcase.unity
