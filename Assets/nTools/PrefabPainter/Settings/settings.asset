@@ -19402,8 +19402,8 @@ MonoBehaviour:
       customPreviewImage: {fileID: 0}
     - name: grass 4
       settings:
-        brushRadius: 2.5
-        brushSpacing: 0.03
+        brushRadius: 0.7
+        brushSpacing: 0.01
         brushOverlapCheckMode: 0
         brushOverlapDistance: 0.5
         brushOverlapCheckObjects: 1
@@ -19428,7 +19428,7 @@ MonoBehaviour:
         pinFixedRotationValue: {x: 0, y: 0, z: 0}
         pinFixedScale: 0
         pinFixedScaleValue: {x: 1, y: 1, z: 1}
-        placeEulerAngles: {x: 0, y: 0, z: 0}
+        placeEulerAngles: {x: 0, y: 0, z: 15}
         placeScale: 1
         throwRadius: 1
         throwSpacing: 1
@@ -23199,7 +23199,7 @@ MonoBehaviour:
     levelsInWhite: 255
     levelsOutBlack: 0
     levelsOutWhite: 255
-  activeTab: 5
+  activeTab: 7
   paintOnSelected: 0
   paintLayers:
     serializedVersion: 2
@@ -23216,7 +23216,7 @@ MonoBehaviour:
   pinSnapScale: 0
   placeAngleStep: 15
   placeScaleStep: 0.1
-  eraseBrushRadius: 0.7
+  eraseBrushRadius: 9.5
   eraseByLayer: 0
   eraseLayers:
     serializedVersion: 2
