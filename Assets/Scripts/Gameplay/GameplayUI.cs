@@ -17,6 +17,12 @@ public class GameplayUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI coinText;
     [SerializeField] private string moveFormat = "{0} / {1}";
     
+    [Header("Progress Bar")]
+    public RectTransform fill;
+    public float maxWidth = 320f;
+    [Tooltip("If true, the bar drains from full to empty as moves are used. If false, it fills from empty to full.")]
+    [SerializeField] private bool drainProgressBar = true;
+    
     [Header("Buttons")]
     [SerializeField] private Button pauseButton;
     [SerializeField] private Button homeButton;
@@ -94,6 +100,24 @@ public class GameplayUI : MonoBehaviour
                 moveCountText.color = new Color(1f, 0.6f, 0f); // Orange warning
             else
                 moveCountText.color = Color.white;
+        }
+        
+        if (fill != null)
+        {
+            float percent = limit > 0 ? (float)current / limit : 0f;
+            if (drainProgressBar)
+            {
+                percent = 1f - percent;
+            }
+            SetProgress(Mathf.Clamp01(percent));
+        }
+    }
+    
+    public void SetProgress(float percent)
+    {
+        if (fill != null)
+        {
+            fill.sizeDelta = new Vector2(maxWidth * percent, 12f);
         }
     }
     
