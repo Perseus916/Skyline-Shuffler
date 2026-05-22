@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.InputSystem;
@@ -39,21 +40,24 @@ public class GameplayManager : MonoBehaviour
     [SerializeField] private LevelLoader levelLoader;
     [SerializeField] private Camera mainCamera;
     [SerializeField] private OutOfMovesUI outOfMovesUI;
+
+    [Header("Hook")]
+    [SerializeField] private hookfollow hookController; // controls visual hook
     
     [Header("Settings")]
     [SerializeField] private LayerMask stackLayerMask;
     [SerializeField] private float animationDuration = 0.3f;
-    
+
     [Header("Input Settings")]
     [Tooltip("Max movement in pixels to still count as a tap (not a swipe)")]
     [SerializeField] private float tapThreshold = 30f;
     [Tooltip("Max time in seconds for a press to count as a tap")]
     [SerializeField] private float tapMaxDuration = 0.5f;
-    
+
     [Header("Selection Visuals")]
     [SerializeField] private Color selectedColor = new Color(1f, 1f, 0.5f, 1f);
     [SerializeField] private Color errorColor = new Color(1f, 0.3f, 0.3f, 1f);
-    
+
     [Header("Events")]
     public UnityEvent<int, int> OnMoveCountChanged; // (current, limit)
     public UnityEvent OnLevelComplete;
@@ -102,7 +106,7 @@ public class GameplayManager : MonoBehaviour
         if (mainCamera == null)
             mainCamera = Camera.main;
     }
-    
+
     /// <summary>
     /// Initialize gameplay for a level (fresh start).
     /// Called by LevelLoader after spawning all objects.
@@ -147,7 +151,7 @@ public class GameplayManager : MonoBehaviour
         
         Debug.Log($"<color=cyan>Level {currentLevelNumber} initialized. Optimal: {optimalMoves}, Limit: {moveLimit}, Capacity: {stackHeight}, Stacks: {allStacks.Count}</color>");
     }
-    
+
     /// <summary>
     /// Restore gameplay from a saved in-progress state.
     /// Called after LevelLoader spawns the default level layout.
@@ -370,6 +374,9 @@ public class GameplayManager : MonoBehaviour
     {
         selectedStack = stack;
         stack.SetSelected(true, selectedColor);
+        // Make hook follow the selected stack's top floor
+        if (hookController != null)
+            hookController.FollowStack(stack);
         Debug.Log($"<color=yellow>Selected stack with {stack.FloorCount} floors</color>");
     }
     
@@ -379,6 +386,9 @@ public class GameplayManager : MonoBehaviour
         {
             selectedStack.SetSelected(false, Color.white);
             selectedStack = null;
+            // Stop hook following when deselecting
+            if (hookController != null)
+                hookController.StopFollow();
             Debug.Log("<color=gray>Deselected</color>");
         }
     }
@@ -437,28 +447,67 @@ public class GameplayManager : MonoBehaviour
         int toIdx = allStacks.IndexOf(to);
         undoStack.Push(new UndoRecord { fromIndex = fromIdx, toIndex = toIdx });
         
-        // Get floor data from source
-        var floorData = from.RemoveTopFloor();
-        if (floorData.floorObject == null) return;
-        
-        // Deselect before animation
-        DeselectStack();
-        
-        // Add to target (handles positioning)
-        to.AddFloor(floorData.floorObject, floorData.style, animationDuration);
-        if (AudioManager.Instance != null) AudioManager.Instance.PlayFloorPlace();
-        
-        // Update move counter
-        moveCount++;
-        OnMoveCountChanged?.Invoke(moveCount, moveLimit);
-        
-        Debug.Log($"<color=cyan>Move {moveCount}/{moveLimit}</color>");
-        
-        // Auto-save after every move
-        SaveInProgressState();
-        
-        // Check win condition
-        CheckWinCondition();
+        // If we have a hook controller, animate hook to source then perform the move in callback
+        if (hookController != null)
+        {
+            hookController.MoveHookToStack(from, 0.15f, () =>
+            {
+                // Get floor data from source
+                var floorData = from.RemoveTopFloor();
+                if (floorData.floorObject == null) return;
+                
+                // NOTE: DO NOT deselect here. Keep the stack selected so the hook continues to follow
+                // until the floor is placed on the destination. Deselect after the hook moves to target.
+                
+                // Add to target (handles positioning)
+                to.AddFloor(floorData.floorObject, floorData.style, animationDuration);
+                if (AudioManager.Instance != null) AudioManager.Instance.PlayFloorPlace();
+                
+                // Update move counter
+                moveCount++;
+                OnMoveCountChanged?.Invoke(moveCount, moveLimit);
+                
+                Debug.Log($"<color=cyan>Move {moveCount}/{moveLimit}</color>");
+                
+                // Auto-save after every move
+                SaveInProgressState();
+                
+                // Move hook to target stack position and then deselect (which also stops follow)
+                hookController.MoveHookToStack(to, 0.15f, () =>
+                {
+                    // Now that the hook has moved to the target, clear selection
+                    DeselectStack();
+                });
+                
+                // Check win condition
+                CheckWinCondition();
+            });
+        }
+        else
+        {
+            // Get floor data from source
+            var floorData = from.RemoveTopFloor();
+            if (floorData.floorObject == null) return;
+            
+            // Deselect before animation
+            DeselectStack();
+            
+            // Add to target (handles positioning)
+            to.AddFloor(floorData.floorObject, floorData.style, animationDuration);
+            if (AudioManager.Instance != null) AudioManager.Instance.PlayFloorPlace();
+            
+            // Update move counter
+            moveCount++;
+            OnMoveCountChanged?.Invoke(moveCount, moveLimit);
+            
+            Debug.Log($"<color=cyan>Move {moveCount}/{moveLimit}</color>");
+            
+            // Auto-save after every move
+            SaveInProgressState();
+            
+            // Check win condition
+            CheckWinCondition();
+        }
     }
     
     private void ShowError(BuildingStack stack)
