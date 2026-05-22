@@ -286,10 +286,20 @@ public class GameManager : MonoBehaviour
         // Replenish 1 free undo on level complete
         SaveSystem.AddFreeUndos(1);
         
-        // Show level complete UI
-        if (levelCompleteUI != null)
+        // Show level complete UI if not the last level
+        bool isLastLevel = (levelNumber >= totalLevelsAvailable) || (Resources.Load<LevelDataSO>($"{levelResourcePath}{levelNumber + 1}") == null);
+        if (isLastLevel)
         {
-            levelCompleteUI.Show(levelNumber, movesTaken, optimalMoves, stars, coinsEarned);
+            Debug.Log("<color=green>Last level complete! Returning to level select.</color>");
+            SaveSystem.ClearInProgressGame();
+            ShowLevelSelect();
+        }
+        else
+        {
+            if (levelCompleteUI != null)
+            {
+                levelCompleteUI.Show(levelNumber, movesTaken, optimalMoves, stars, coinsEarned);
+            }
         }
         
         Debug.Log($"<color=green>Level {levelNumber} complete! ⭐{stars} | +{coinsEarned} coins | Moves: {movesTaken}/{optimalMoves}</color>");

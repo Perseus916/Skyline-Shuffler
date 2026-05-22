@@ -16,6 +16,8 @@ public class GameplayUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI levelNumberText;
     [SerializeField] private TextMeshProUGUI coinText;
     [SerializeField] private string moveFormat = "{0} / {1}";
+    [Tooltip("If true, shows remaining moves (limit - current). If false, shows moves used (current).")]
+    [SerializeField] private bool showRemainingMoves = true;
     
     [Header("Progress Bar")]
     public RectTransform fill;
@@ -74,6 +76,11 @@ public class GameplayUI : MonoBehaviour
         UpdateCoins(SaveSystem.GetCoins());
         UpdateUndoCount(SaveSystem.GetFreeUndos());
         UpdateHintCount(SaveSystem.GetFreeHints());
+        
+        if (gameplayManager != null)
+        {
+            UpdateMoveCounter(gameplayManager.GetMoveCount(), gameplayManager.GetMoveLimit());
+        }
     }
     
     private void OnDisable()
@@ -91,9 +98,10 @@ public class GameplayUI : MonoBehaviour
     {
         if (moveCountText != null)
         {
-            moveCountText.text = string.Format(moveFormat, current, limit);
+            int displayMoves = showRemainingMoves ? Mathf.Max(0, limit - current) : current;
+            moveCountText.text = string.Format(moveFormat, displayMoves, limit);
             
-            float ratio = (float)current / limit;
+            float ratio = limit > 0 ? (float)current / limit : 0f;
             if (ratio > 0.9f)
                 moveCountText.color = Color.red;
             else if (ratio > 0.7f)
