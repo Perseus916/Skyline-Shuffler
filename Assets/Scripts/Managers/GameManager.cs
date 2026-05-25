@@ -268,9 +268,9 @@ public class GameManager : MonoBehaviour
     /// <summary>
     /// Called by GameplayManager when level is won
     /// </summary>
-    public void OnLevelComplete(int levelNumber, int movesTaken, int optimalMoves)
+    public void OnLevelComplete(int levelNumber, int movesTaken, int optimalMoves, int wrongMoves)
     {
-        int stars = CalculateStars(movesTaken, optimalMoves);
+        int stars = CalculateStars(wrongMoves);
         
         // Check if this is a new best for star bonus
         var previousProgress = SaveSystem.GetLevelProgress(levelNumber);
@@ -302,16 +302,14 @@ public class GameManager : MonoBehaviour
             }
         }
         
-        Debug.Log($"<color=green>Level {levelNumber} complete! ⭐{stars} | +{coinsEarned} coins | Moves: {movesTaken}/{optimalMoves}</color>");
+        Debug.Log($"<color=green>Level {levelNumber} complete! ⭐{stars} | +{coinsEarned} coins | Wrong moves: {wrongMoves} | Moves: {movesTaken}/{optimalMoves}</color>");
     }
     
-    public int CalculateStars(int movesTaken, int optimalMoves)
+    public int CalculateStars(int wrongMoves)
     {
-        if (optimalMoves <= 0) return 1;
-        
-        if (movesTaken <= optimalMoves)
+        if (wrongMoves <= 0)
             return 3;
-        else if (movesTaken <= Mathf.CeilToInt(optimalMoves * 1.5f))
+        else if (wrongMoves == 1)
             return 2;
         else
             return 1;
