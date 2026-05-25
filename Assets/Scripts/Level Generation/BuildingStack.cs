@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -298,28 +298,95 @@ public class BuildingStack : MonoBehaviour
         {
             foundationRenderer.material.color = selected ? highlightColor : originalColor;
         }
-        
-        // Elevate or lower the top floor (only if we have movable floors)
-        if (MovableFloorCount > 0)
+    }
+
+    private Coroutine elevationAnimation;
+
+    /// <summary>
+    /// Smoothly animates the Y elevation of the top floor for crane pickup/drop animations.
+    /// </summary>
+    public void AnimateTopFloorElevation(bool elevate, float duration, System.Action onComplete = null)
+    {
+        if (MovableFloorCount == 0)
         {
-            GameObject topFloor = floors[floors.Count - 1];
-            if (topFloor != null)
-            {
-                Vector3 pos = topFloor.transform.localPosition;
-                
-                if (selected)
-                {
-                    pos.y += 8f;
-                }
-                else
-                {
-                    int floorIndex = floors.Count - 1;
-                    pos.y = FIRST_FLOOR_LOCAL_Y + (floorIndex * localFloorSpacing);
-                }
-                
-                topFloor.transform.localPosition = pos;
-            }
+            onComplete?.Invoke();
+            return;
         }
+
+        GameObject topFloor = floors[floors.Count - 1];
+        if (topFloor == null)
+        {
+            onComplete?.Invoke();
+            return;
+        }
+
+        if (elevationAnimation != null)
+            StopCoroutine(elevationAnimation);
+
+        float targetY;
+        int floorIndex = floors.Count - 1;
+        float normalY = FIRST_FLOOR_LOCAL_Y + (floorIndex * localFloorSpacing);
+
+        if (elevate)
+            targetY = normalY + 8f;
+        else
+            targetY = normalY;
+
+        elevationAnimation = StartCoroutine(AnimateTopFloorLocalY(topFloor, targetY, duration, onComplete));
+    }
+
+    private System.Collections.IEnumerator AnimateTopFloorLocalY(GameObject floor, float targetY, float duration, System.Action onComplete)
+    {
+        Vector3 pos = floor.transform.localPosition;
+        float startY = pos.y;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            t = t * t * (3f - 2f * t); // Smoothstep
+            pos.y = Mathf.Lerp(startY, targetY, t);
+            floor.transform.localPosition = pos;
+            yield return null;
+        }
+
+        pos.y = targetY;
+        floor.transform.localPosition = pos;
+        elevationAnimation = null;
+        onComplete?.Invoke();
+    }
+
+    /// <summary>
+    /// Instantly sets the Y elevation of the top floor (used for quick resets/restoration).
+    /// </summary>
+    public void SetTopFloorElevationInstant(bool elevate)
+    {
+        if (MovableFloorCount == 0) return;
+
+        GameObject topFloor = floors[floors.Count - 1];
+        if (topFloor != null)
+        {
+            Vector3 pos = topFloor.transform.localPosition;
+            int floorIndex = floors.Count - 1;
+            float normalY = FIRST_FLOOR_LOCAL_Y + (floorIndex * localFloorSpacing);
+
+            pos.y = elevate ? (normalY + 8f) : normalY;
+            topFloor.transform.localPosition = pos;
+        }
+    }
+
+    /// <summary>
+    /// Returns the final world position of the top floor in its normal (non-elevated) state.
+    /// </summary>
+    public Vector3 GetTopFloorWorldPosition()
+    {
+        if (floors.Count == 0) return transform.position;
+
+        int floorIndex = floors.Count - 1;
+        float localY = FIRST_FLOOR_LOCAL_Y + (floorIndex * localFloorSpacing);
+        Vector3 localPos = new Vector3(0, localY, 0);
+        return transform.TransformPoint(localPos);
     }
     
     /// <summary>

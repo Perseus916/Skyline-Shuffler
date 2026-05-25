@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.InputSystem;
@@ -150,6 +150,11 @@ public class GameplayManager : MonoBehaviour
         SaveInProgressState();
         
         Debug.Log($"<color=cyan>Level {currentLevelNumber} initialized. Optimal: {optimalMoves}, Limit: {moveLimit}, Capacity: {stackHeight}, Stacks: {allStacks.Count}</color>");
+
+        if (hookController != null)
+        {
+            StartCoroutine(PositionHookOnStartFrame());
+        }
     }
 
     /// <summary>
@@ -196,6 +201,11 @@ public class GameplayManager : MonoBehaviour
         OnCoinsChanged?.Invoke(SaveSystem.GetCoins());
         
         Debug.Log($"<color=green>Level {currentLevelNumber} RESTORED at move {moveCount}/{moveLimit} (Capacity: {stackHeight})</color>");
+
+        if (hookController != null)
+        {
+            StartCoroutine(PositionHookOnStartFrame());
+        }
     }
 
     /// <summary>
@@ -339,30 +349,30 @@ public class GameplayManager : MonoBehaviour
             }
         }
         
-        // Tapped empty space or non-stack - deselect
+        // Tapped empty space or non-stack - deselect smoothly
         if (selectedStack != null)
         {
-            DeselectStack();
+            StartCoroutine(AnimateDeselectStackFlow());
         }
     }
     
     private void ProcessStackTap(BuildingStack tappedStack)
     {
-        // Case 1: Nothing selected - try to select this stack
+        // Case 1: Nothing selected - try to select this stack smoothly
         if (selectedStack == null)
         {
             // Can't select empty or ground-only stacks
             if (tappedStack.MovableFloorCount > 0)
             {
-                SelectStack(tappedStack);
+                StartCoroutine(AnimateSelectStackFlow(tappedStack));
             }
             return;
         }
         
-        // Case 2: Same stack tapped - deselect
+        // Case 2: Same stack tapped - deselect smoothly
         if (tappedStack == selectedStack)
         {
-            DeselectStack();
+            StartCoroutine(AnimateDeselectStackFlow());
             return;
         }
         
@@ -380,15 +390,25 @@ public class GameplayManager : MonoBehaviour
         Debug.Log($"<color=yellow>Selected stack with {stack.FloorCount} floors</color>");
     }
     
-    private void DeselectStack()
+    private void DeselectStack(bool animateHook = true)
     {
         if (selectedStack != null)
         {
-            selectedStack.SetSelected(false, Color.white);
-            selectedStack = null;
-            // Stop hook following when deselecting
             if (hookController != null)
                 hookController.StopFollow();
+
+            BuildingStack stackToDrop = selectedStack;
+
+            // Instantly reset top floor elevation
+            stackToDrop.SetTopFloorElevationInstant(false);
+            selectedStack.SetSelected(false, Color.white);
+            selectedStack = null;
+
+            if (animateHook && hookController != null)
+            {
+                hookController.MoveHookToStack(stackToDrop, 0.15f);
+            }
+            
             Debug.Log("<color=gray>Deselected</color>");
         }
     }
@@ -450,37 +470,63 @@ public class GameplayManager : MonoBehaviour
         // If we have a hook controller, animate hook to source then perform the move in callback
         if (hookController != null)
         {
-            hookController.MoveHookToStack(from, 0.15f, () =>
+            isAnimating = true;
+
+            hookController.MoveHookToStack(from, 0f, () =>
             {
                 // Get floor data from source
                 var floorData = from.RemoveTopFloor();
-                if (floorData.floorObject == null) return;
-                
-                // NOTE: DO NOT deselect here. Keep the stack selected so the hook continues to follow
-                // until the floor is placed on the destination. Deselect after the hook moves to target.
-                
-                // Add to target (handles positioning)
-                to.AddFloor(floorData.floorObject, floorData.style, animationDuration);
-                if (AudioManager.Instance != null) AudioManager.Instance.PlayFloorPlace();
-                
-                // Update move counter
-                moveCount++;
-                OnMoveCountChanged?.Invoke(moveCount, moveLimit);
-                
-                Debug.Log($"<color=cyan>Move {moveCount}/{moveLimit}</color>");
-                
-                // Auto-save after every move
-                SaveInProgressState();
-                
-                // Move hook to target stack position and then deselect (which also stops follow)
-                hookController.MoveHookToStack(to, 0.15f, () =>
+                if (floorData.floorObject == null)
                 {
-                    // Now that the hook has moved to the target, clear selection
-                    DeselectStack();
-                });
+                    isAnimating = false;
+                    return;
+                }
+
+                // Stop hook following during transit
+                hookController.StopFollow();
+
+                // Parent the floor to the hook so it moves horizontally with the crane
+                GameObject floorObj = floorData.floorObject;
+                floorObj.transform.SetParent(hookController.hook);
                 
-                // Check win condition
-                CheckWinCondition();
+                // Position the floor slightly below the hook (compensate for hookOffset y=2)
+                floorObj.transform.localPosition = new Vector3(0f, -hookController.hookOffset.y, 0f);
+
+                // Move hook quickly to the elevated position above target stack
+                Transform targetTop = FindTopFloorTransformOfStack(to);
+                Vector3 targetBasePos = (targetTop != null ? targetTop.position : to.transform.position);
+                Vector3 targetElevatedPos = targetBasePos + hookController.hookOffset + new Vector3(0f, 8f, 0f);
+
+                // We smoothly move hook to this elevated position over 0.2s (fast horizontal transit!)
+                StartCoroutine(MoveHookToPositionCoroutine(targetElevatedPos, 0.2f, () =>
+                {
+                    // Arrived high up above 'to' stack! Now perform the drop.
+                    // First unparent from hook
+                    floorObj.transform.SetParent(null);
+
+                    // Add to target stack (which handles parenting and animates it down over animationDuration)
+                    to.AddFloor(floorObj, floorData.style, animationDuration);
+                    if (AudioManager.Instance != null) AudioManager.Instance.PlayFloorPlace();
+
+                    // Update move counter
+                    moveCount++;
+                    OnMoveCountChanged?.Invoke(moveCount, moveLimit);
+
+                    // Auto-save
+                    SaveInProgressState();
+
+                    // Smoothly move the hook down to follow the dropped block to its landing spot
+                    Vector3 finalHookPos = to.GetTopFloorWorldPosition() + hookController.hookOffset;
+                    StartCoroutine(MoveHookToPositionCoroutine(finalHookPos, animationDuration, () =>
+                    {
+                        // Now that the hook is down, clear selection and release animation block
+                        DeselectStack(false);
+                        isAnimating = false;
+                    }));
+
+                    // Check win condition
+                    CheckWinCondition();
+                }));
             });
         }
         else
@@ -708,7 +754,7 @@ public class GameplayManager : MonoBehaviour
         OnMoveCountChanged?.Invoke(moveCount, moveLimit);
         OnUndoCountChanged?.Invoke(SaveSystem.GetFreeUndos());
         
-        DeselectStack();
+        DeselectStack(false);
         SaveInProgressState();
         
         Debug.Log($"<color=yellow>Undo! Move count: {moveCount}/{moveLimit} | Undos left: {SaveSystem.GetFreeUndos()}</color>");
@@ -887,5 +933,159 @@ public class GameplayManager : MonoBehaviour
         
         Debug.Log($"<color=green>Hint: Move from stack {allStacks.IndexOf(hintFrom)} to {allStacks.IndexOf(hintTo)}</color>");
         return true;
+    }
+
+    // ========================================
+    // HOOK STARTUP CONFIGURATION
+    // ========================================
+
+    /// <summary>
+    /// Coroutine to position the crane hook on the center stack's top floor on the start frame.
+    /// This ensures we override any default hook positioning from other components (e.g., CraneBuilder).
+    /// </summary>
+    private System.Collections.IEnumerator PositionHookOnStartFrame()
+    {
+        // Position it instantly now
+        PositionHookOnCenterStack();
+
+        // Also position it on the next frame after Start() has executed on all objects
+        yield return null;
+        PositionHookOnCenterStack();
+    }
+
+    /// <summary>
+    /// Finds the building stack closest to the geometric center of all stacks,
+    /// and positions the crane hook over its top floor.
+    /// </summary>
+    private void PositionHookOnCenterStack()
+    {
+        if (hookController == null || allStacks == null || allStacks.Count == 0) return;
+
+        // Calculate the geometric center of all stacks
+        Vector3 center = Vector3.zero;
+        int validCount = 0;
+        foreach (var stack in allStacks)
+        {
+            if (stack != null)
+            {
+                center += stack.transform.position;
+                validCount++;
+            }
+        }
+
+        if (validCount == 0) return;
+        center /= validCount;
+
+        // Find the stack closest to the center
+        BuildingStack centerStack = null;
+        float minDistance = float.MaxValue;
+        foreach (var stack in allStacks)
+        {
+            if (stack == null) continue;
+            float dist = Vector3.Distance(stack.transform.position, center);
+            if (dist < minDistance)
+            {
+                minDistance = dist;
+                centerStack = stack;
+            }
+        }
+
+        if (centerStack != null)
+        {
+            // Position the hook instantly
+            hookController.MoveHookToStack(centerStack, 0f);
+        }
+    }
+
+    // ========================================
+    // SMOOTH ELEVATION & TRANSIT ANIMATIONS
+    // ========================================
+
+    private Transform FindTopFloorTransformOfStack(BuildingStack stack)
+    {
+        if (stack == null) return null;
+        Transform stackTransform = stack.transform;
+        Transform top = null;
+        float maxY = float.MinValue;
+
+        for (int i = 0; i < stackTransform.childCount; i++)
+        {
+            Transform child = stackTransform.GetChild(i);
+            if (!child.gameObject.activeInHierarchy) continue;
+
+            float y = child.position.y;
+            if (y > maxY)
+            {
+                maxY = y;
+                top = child;
+            }
+        }
+
+        return top;
+    }
+
+    private System.Collections.IEnumerator MoveHookToPositionCoroutine(Vector3 destination, float duration, System.Action onComplete)
+    {
+        if (hookController == null || hookController.hook == null)
+        {
+            onComplete?.Invoke();
+            yield break;
+        }
+
+        Transform hook = hookController.hook;
+        Vector3 start = hook.position;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            t = t * t * (3f - 2f * t); // Smoothstep
+            hook.position = Vector3.Lerp(start, destination, t);
+            yield return null;
+        }
+
+        hook.position = destination;
+        onComplete?.Invoke();
+    }
+
+    private System.Collections.IEnumerator AnimateSelectStackFlow(BuildingStack stack)
+    {
+        isAnimating = true;
+
+        if (hookController != null)
+        {
+            Transform top = FindTopFloorTransformOfStack(stack);
+            Vector3 targetPos = (top != null ? top.position : stack.transform.position) + hookController.hookOffset;
+
+            bool done = false;
+            StartCoroutine(MoveHookToPositionCoroutine(targetPos, 0.25f, () => done = true));
+            while (!done) yield return null;
+        }
+
+        SelectStack(stack);
+
+        bool elevateDone = false;
+        stack.AnimateTopFloorElevation(true, 0.25f, () => elevateDone = true);
+        while (!elevateDone) yield return null;
+
+        isAnimating = false;
+    }
+
+    private System.Collections.IEnumerator AnimateDeselectStackFlow()
+    {
+        if (selectedStack == null) yield break;
+
+        isAnimating = true;
+
+        BuildingStack stackToDrop = selectedStack;
+
+        bool lowerDone = false;
+        stackToDrop.AnimateTopFloorElevation(false, 0.25f, () => lowerDone = true);
+        while (!lowerDone) yield return null;
+
+        DeselectStack(false);
+
+        isAnimating = false;
     }
 }

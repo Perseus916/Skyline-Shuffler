@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Collections;
 using UnityEngine;
 
@@ -34,6 +34,13 @@ public class hookfollow : MonoBehaviour
         if (stack == null) return;
         targetStack = stack;
         currentTopFloor = FindTopFloorTransform(stack.transform);
+
+        // Stop any active movement coroutine so we follow instantly and responsively
+        if (moveCoroutine != null)
+        {
+            StopCoroutine(moveCoroutine);
+            moveCoroutine = null;
+        }
     }
 
     /// <summary>Stop following any stack.</summary>
@@ -41,6 +48,13 @@ public class hookfollow : MonoBehaviour
     {
         targetStack = null;
         currentTopFloor = null;
+
+        // Stop any active movement coroutine so we stop immediately
+        if (moveCoroutine != null)
+        {
+            StopCoroutine(moveCoroutine);
+            moveCoroutine = null;
+        }
     }
 
     /// <summary>
@@ -117,7 +131,7 @@ public class hookfollow : MonoBehaviour
     }
 
     /// <summary>
-    /// Find the child transform of the stack that is highest in world Y — treated as the top floor.
+    /// Find the child transform of the stack that is highest in world Y - treated as the top floor.
     /// This is robust to BuildingStack's internal private lists because floors are parented under the stack.
     /// </summary>
     private Transform FindTopFloorTransform(Transform stackTransform)
