@@ -52,9 +52,6 @@ public class LevelLoader : MonoBehaviour
         
         currentStackHeight = GetStackHeightFromLevel(currentLevelData);
 
-        // 1. Spawn Crane
-        SpawnCrane(currentLevelData.craneGridPos, offset);
-
         // 2. Build the city
         foreach (SlotData slot in currentLevelData.slots)
         {
@@ -90,9 +87,6 @@ public class LevelLoader : MonoBehaviour
         float offset = (currentLevelData.gridDimension - 1) * gridSpacing * 0.5f;
         
         currentStackHeight = GetStackHeightFromLevel(currentLevelData);
-
-        // 1. Spawn Crane
-        SpawnCrane(currentLevelData.craneGridPos, offset);
 
         // 2. Build the city (default layout — will be rearranged)
         foreach (SlotData slot in currentLevelData.slots)
