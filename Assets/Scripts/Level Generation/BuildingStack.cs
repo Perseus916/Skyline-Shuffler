@@ -266,20 +266,115 @@ public class BuildingStack : MonoBehaviour
     private IEnumerator AnimateFloorToPosition(GameObject floor, Vector3 targetLocalPos, float duration)
     {
         Vector3 startPos = floor.transform.localPosition;
+        Vector3 startScale = compensatedScale * 1.18f; // Start 18% larger
+        Vector3 targetScale = compensatedScale;
+
         float elapsed = 0f;
         
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
-            float t = elapsed / duration;
-            t = t * t * (3f - 2f * t); // Smoothstep
-            
-            floor.transform.localPosition = Vector3.Lerp(startPos, targetLocalPos, t);
+            float t = Mathf.Clamp01(elapsed / duration);
+
+            // Easing position and scale with organic EaseOutBack (settling spring bounce and squish)
+            float easeT = EaseOutBack(t);
+            floor.transform.localPosition = Vector3.Lerp(startPos, targetLocalPos, easeT);
+            floor.transform.localScale = Vector3.Lerp(startScale, targetScale, easeT);
+
             yield return null;
         }
         
         floor.transform.localPosition = targetLocalPos;
+        floor.transform.localScale = targetScale;
         currentAnimation = null;
+
+        // Play placement snap effects (screen shake, material flash/glow)
+        PlayPlacementSnapFeedback(floor);
+    }
+
+    private float EaseOutBack(float x)
+    {
+        float c1 = 1.70158f;
+        float c3 = c1 + 1f;
+        return 1f + c3 * Mathf.Pow(x - 1f, 3f) + c1 * Mathf.Pow(x - 1f, 2f);
+    }
+
+    private void PlayPlacementSnapFeedback(GameObject floor)
+    {
+        // 1. Trigger camera screen shake for perfect physical landing feel
+        if (GameplayManager.Instance != null)
+        {
+            GameplayManager.Instance.TriggerCameraShake(0.12f, 0.035f);
+        }
+
+        // 2. Play beautiful material glow/flash pulse directly on the block
+        StartCoroutine(FlashBlockGlowCoroutine(floor, 0.25f));
+    }
+
+    private IEnumerator FlashBlockGlowCoroutine(GameObject floor, float duration)
+    {
+        if (floor == null) yield break;
+
+        Renderer[] renderers = floor.GetComponentsInChildren<Renderer>();
+        if (renderers.Length == 0) yield break;
+
+        // Store original materials and colors
+        var originalColors = new Dictionary<Renderer, List<Color>>();
+        foreach (var r in renderers)
+        {
+            if (r == null || r.material == null) continue;
+            var colors = new List<Color>();
+            foreach (var mat in r.materials)
+            {
+                if (mat.HasProperty("_Color")) colors.Add(mat.color);
+                else if (mat.HasProperty("_BaseColor")) colors.Add(mat.GetColor("_BaseColor"));
+                else colors.Add(Color.white);
+            }
+            originalColors[r] = colors;
+        }
+
+        float elapsed = 0f;
+        Color glowColor = new Color(1.4f, 1.4f, 1.4f, 1f); // Beautiful soft HDR-like white glow pulse
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            
+            // Peak glow at t = 0.2, then fade back to original
+            float factor = t < 0.2f ? (t / 0.2f) : (1f - (t - 0.2f) / 0.8f);
+
+            foreach (var r in renderers)
+            {
+                if (r == null || !originalColors.ContainsKey(r)) continue;
+                for (int i = 0; i < r.materials.Length; i++)
+                {
+                    if (i >= originalColors[r].Count) break;
+                    
+                    Color orig = originalColors[r][i];
+                    Color current = Color.Lerp(orig, glowColor, factor * 0.45f); // Soft mix
+
+                    var mat = r.materials[i];
+                    if (mat.HasProperty("_Color")) mat.color = current;
+                    else if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", current);
+                }
+            }
+            yield return null;
+        }
+
+        // Restore original colors perfectly
+        foreach (var r in renderers)
+        {
+            if (r == null || !originalColors.ContainsKey(r)) continue;
+            for (int i = 0; i < r.materials.Length; i++)
+            {
+                if (i >= originalColors[r].Count) break;
+                
+                var mat = r.materials[i];
+                if (mat.HasProperty("_Color")) mat.color = originalColors[r][i];
+                else if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", originalColors[r][i]);
+            }
+        }
     }
     
     // ========================================

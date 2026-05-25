@@ -36,6 +36,13 @@ public class LevelStateData
 /// </summary>
 public class GameplayManager : MonoBehaviour
 {
+    public static GameplayManager Instance { get; private set; }
+
+    private void Awake()
+    {
+        Instance = this;
+    }
+
     [Header("References")]
     [SerializeField] private LevelLoader levelLoader;
     [SerializeField] private Camera mainCamera;
@@ -1087,5 +1094,35 @@ public class GameplayManager : MonoBehaviour
         DeselectStack(false);
 
         isAnimating = false;
+    }
+
+    /// <summary>
+    /// Triggers a modern, satisfying camera screen shake during block placement snaps.
+    /// </summary>
+    public void TriggerCameraShake(float duration = 0.15f, float magnitude = 0.04f)
+    {
+        if (mainCamera != null)
+        {
+            StartCoroutine(CameraShakeCoroutine(duration, magnitude));
+        }
+    }
+
+    private System.Collections.IEnumerator CameraShakeCoroutine(float duration, float magnitude)
+    {
+        Vector3 originalPos = mainCamera.transform.localPosition;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            float x = UnityEngine.Random.Range(-1f, 1f) * magnitude;
+            float y = UnityEngine.Random.Range(-1f, 1f) * magnitude;
+
+            mainCamera.transform.localPosition = new Vector3(originalPos.x + x, originalPos.y + y, originalPos.z);
+
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        mainCamera.transform.localPosition = originalPos;
     }
 }
