@@ -15,6 +15,7 @@ public class GameplayUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI moveCountText;
     [SerializeField] private TextMeshProUGUI levelNumberText;
     [SerializeField] private TextMeshProUGUI coinText;
+    [SerializeField] private TextMeshProUGUI totalStarsText;
     [SerializeField] private string moveFormat = "{0} / {1}";
     [Tooltip("If true, shows remaining moves (limit - current). If false, shows moves used (current).")]
     [SerializeField] private bool showRemainingMoves = true;
@@ -76,6 +77,7 @@ public class GameplayUI : MonoBehaviour
         UpdateCoins(SaveSystem.GetCoins());
         UpdateUndoCount(SaveSystem.GetFreeUndos());
         UpdateHintCount(SaveSystem.GetFreeHints());
+        UpdateTotalStars();
         
         if (gameplayManager != null)
         {
@@ -183,6 +185,13 @@ public class GameplayUI : MonoBehaviour
         // Refresh undo/hint labels since coin count affects what's shown
         UpdateUndoCount(SaveSystem.GetFreeUndos());
         UpdateHintCount(SaveSystem.GetFreeHints());
+        UpdateTotalStars();
+    }
+
+    private void UpdateTotalStars()
+    {
+        if (totalStarsText != null)
+            totalStarsText.text = $"{SaveSystem.GetTotalStars()}";
     }
     
     private void OnPauseClicked()

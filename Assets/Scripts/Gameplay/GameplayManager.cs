@@ -27,6 +27,7 @@ public class LevelStateData
 {
     public int levelNumber;
     public int moveCount;
+    public int wrongMoveCount;
     public List<StackStateData> stacks = new();
 }
 
@@ -76,6 +77,7 @@ public class GameplayManager : MonoBehaviour
     // State
     private BuildingStack selectedStack;
     private int moveCount;
+    private int wrongMoveCount;
     private int moveLimit;
     private int stackHeight;
     private bool isAnimating;
@@ -123,6 +125,7 @@ public class GameplayManager : MonoBehaviour
         currentLevelData = levelData;
         allStacks = stacks;
         moveCount = 0;
+        wrongMoveCount = 0;
         moveLimit = levelData.playerMoveLimit;
         stackHeight = ResolveMovableStackHeight(stacks, maxStackHeight);
         foreach (var stack in allStacks)
@@ -174,6 +177,7 @@ public class GameplayManager : MonoBehaviour
         currentLevelData = levelData;
         allStacks = stacks;
         moveCount = savedState.moveCount;
+        wrongMoveCount = savedState.wrongMoveCount;
         moveLimit = levelData.playerMoveLimit;
         stackHeight = ResolveMovableStackHeight(stacks, maxStackHeight);
         foreach (var stack in allStacks)
@@ -426,6 +430,7 @@ public class GameplayManager : MonoBehaviour
         if (from.MovableFloorCount == 0)
         {
             ShowError(from);
+            RegisterWrongMove();
             return;
         }
         
@@ -443,6 +448,7 @@ public class GameplayManager : MonoBehaviour
             {
                 ShowError(from);
                 OnMoveFailed?.Invoke();
+                RegisterWrongMove();
             }
             Debug.Log("<color=red>Move limit reached! Showing recovery options.</color>");
             return;
@@ -454,6 +460,7 @@ public class GameplayManager : MonoBehaviour
         {
             ShowError(to);
             OnMoveFailed?.Invoke();
+            RegisterWrongMove();
             
             if (to.GetTopFloorStyle() != null && to.GetTopFloorStyle() != movingStyle)
                 Debug.Log($"<color=red>Wrong type! Top is {to.GetTopFloorStyle().buildingName}, placing {movingStyle.buildingName}</color>");
@@ -587,7 +594,7 @@ public class GameplayManager : MonoBehaviour
         // Notify GameManager (handles save + UI)
         if (GameManager.Instance != null)
         {
-            GameManager.Instance.OnLevelComplete(currentLevelNumber, moveCount, optimalMoves);
+            GameManager.Instance.OnLevelComplete(currentLevelNumber, moveCount, optimalMoves, wrongMoveCount);
         }
     }
     
@@ -604,7 +611,8 @@ public class GameplayManager : MonoBehaviour
         LevelStateData state = new LevelStateData
         {
             levelNumber = currentLevelNumber,
-            moveCount = moveCount
+            moveCount = moveCount,
+            wrongMoveCount = wrongMoveCount
         };
         
         for (int i = 0; i < allStacks.Count; i++)
@@ -619,6 +627,13 @@ public class GameplayManager : MonoBehaviour
         
         string json = JsonUtility.ToJson(state);
         SaveSystem.SaveInProgressGame(currentLevelNumber, json, moveCount);
+    }
+
+    private void RegisterWrongMove()
+    {
+        wrongMoveCount++;
+        Debug.Log($"<color=yellow>Wrong move {wrongMoveCount}</color>");
+        SaveInProgressState();
     }
     
     /// <summary>
