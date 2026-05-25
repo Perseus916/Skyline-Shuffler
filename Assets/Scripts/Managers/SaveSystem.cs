@@ -121,9 +121,7 @@ public static class SaveSystem
         
         if (existing != null)
         {
-            // Only update if better
-            if (stars > existing.progress.stars)
-                existing.progress.stars = stars;
+            existing.progress.stars = stars;
             if (!existing.progress.completed || moves < existing.progress.bestMoves)
                 existing.progress.bestMoves = moves;
             existing.progress.completed = true;
