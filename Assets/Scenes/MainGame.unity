@@ -14005,37 +14005,13 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 689655332}
-  - component: {fileID: 689655331}
   m_Layer: 0
   m_Name: ' flickering light'
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
---- !u!114 &689655331
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 689655330}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d4f118147afb7964ca574c81a2631db3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BuildingWindowEmissionController
-  windowMaterials:
-  - {fileID: 2100000, guid: 4d1c68a10ea4a664e8b4c92bfd01fb33, type: 2}
-  - {fileID: 2100000, guid: a2ae5a631a3a1024ab030b46cc53ac4c, type: 2}
-  - {fileID: 2100000, guid: c58893c1466db8841b3d806b9aa1b745, type: 2}
-  - {fileID: 2100000, guid: 78f828dc546e7e34aae8050c3377aa7b, type: 2}
-  - {fileID: 2100000, guid: 525b44d1ff595314d91b20c6f59056c6, type: 2}
-  offIntensity: -5
-  onIntensity: 8
-  flickerCount: 6
-  flickerOnRange: {x: 0.04, y: 0.12}
-  flickerOffRange: {x: 0.03, y: 0.09}
+  m_IsActive: 1
 --- !u!4 &689655332
 Transform:
   m_ObjectHideFlags: 0

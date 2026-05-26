@@ -613,6 +613,55 @@ public class BuildingStack : MonoBehaviour
         StopFlicker();
         TurnOffEmission();
     }
+
+    /// <summary>
+    /// Check if this stack is complete at startup/restore and apply completed visuals & full lights instantly.
+    /// </summary>
+    public void CheckAndApplyInitialCompletionState()
+    {
+        // Stacks with no ground floor are temporary/staging stacks, they should never lock as complete.
+        if (groundFloorCount == 0)
+        {
+            ForceIncompleteState();
+            return;
+        }
+
+        // Don't lock empty or ground-only stacks
+        if (floors.Count <= groundFloorCount)
+        {
+            ForceIncompleteState();
+            return;
+        }
+
+        if (IsComplete())
+        {
+            isCompleted = true;
+            SetCompletionVisuals(true);
+            StopFlicker();
+            
+            // Turn lights on instantly (intensity 2x)
+            flickerCoroutine = StartCoroutine(TurnOnLightsInstantCoroutine());
+        }
+        else
+        {
+            ForceIncompleteState();
+        }
+    }
+
+    private System.Collections.IEnumerator TurnOnLightsInstantCoroutine()
+    {
+        // Wait one frame so that SetCompletionVisuals has fully activated children
+        yield return null;
+
+        var emissiveMats = CollectEmissiveMaterials();
+        foreach (var (mat, origColor) in emissiveMats)
+        {
+            if (mat != null)
+                mat.SetColor("_EmissionColor", origColor * 2f);
+        }
+        
+        flickerCoroutine = null;
+    }
     
     /// <summary>
     /// Toggle CompleteBuilding/IncompleteBuilding children on ALL floors.

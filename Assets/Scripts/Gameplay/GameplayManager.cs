@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.InputSystem;
@@ -133,7 +133,7 @@ public class GameplayManager : MonoBehaviour
             if (stack != null)
             {
                 stack.SetMaxStackHeight(stackHeight);
-                stack.ForceIncompleteState();
+                stack.CheckAndApplyInitialCompletionState();
             }
         }
         levelComplete = false;
@@ -205,6 +205,15 @@ public class GameplayManager : MonoBehaviour
         
         // Rearrange floors to match saved state
         RearrangeStacksFromState(savedState);
+        
+        // Ensure any completed buildings after restore have their lights and completion visuals set instantly
+        foreach (var stack in allStacks)
+        {
+            if (stack != null)
+            {
+                stack.CheckAndApplyInitialCompletionState();
+            }
+        }
         
         OnMoveCountChanged?.Invoke(moveCount, moveLimit);
         OnUndoCountChanged?.Invoke(SaveSystem.GetFreeUndos());
