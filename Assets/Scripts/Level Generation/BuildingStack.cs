@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -38,6 +38,10 @@ public class BuildingStack : MonoBehaviour
     
     // Animation
     private Coroutine currentAnimation;
+
+    // Emission light control
+    private Coroutine flickerCoroutine;
+    private static readonly Dictionary<string, Color> knownEmissionColors = new();
     
     // ========================================
     // INITIALIZATION
@@ -107,6 +111,10 @@ public class BuildingStack : MonoBehaviour
         // Completion is earned during gameplay moves.
         isCompleted = false;
         SetCompletionVisuals(false);
+
+        // Stop any ongoing flicker and cache original emission colors
+        StopFlicker();
+        CacheAndZeroEmission();
         
         Debug.Log($"<color=cyan>Stack initialized: {floors.Count} total floors ({groundFloorCount} ground, {MovableFloorCount} movable)</color>");
     }
@@ -227,6 +235,9 @@ public class BuildingStack : MonoBehaviour
         // Unparent from this stack
         floor.transform.SetParent(null);
         
+        StopFlicker();
+        TurnOffEmission();
+        
         return (floor, style);
     }
     
@@ -257,6 +268,12 @@ public class BuildingStack : MonoBehaviour
         else
         {
             floor.transform.localPosition = targetLocalPos;
+        }
+        
+        if (!IsComplete())
+        {
+            StopFlicker();
+            TurnOffEmission();
         }
         
         // Check if stack just became complete
@@ -569,12 +586,20 @@ public class BuildingStack : MonoBehaviour
         {
             isCompleted = true;
             SetCompletionVisuals(true);
+            
+            // Trigger the smooth flickering light effect!
+            StopFlicker();
+            flickerCoroutine = StartCoroutine(FlickerLightsCoroutine());
+
             Debug.Log($"<color=green>🏙️ Stack complete! All {floors.Count} floors matched.</color>");
         }
         else if (!nowComplete && isCompleted)
         {
             isCompleted = false;
             SetCompletionVisuals(false);
+
+            StopFlicker();
+            TurnOffEmission();
         }
     }
 
@@ -585,6 +610,8 @@ public class BuildingStack : MonoBehaviour
     {
         isCompleted = false;
         SetCompletionVisuals(false);
+        StopFlicker();
+        TurnOffEmission();
     }
     
     /// <summary>
@@ -612,6 +639,184 @@ public class BuildingStack : MonoBehaviour
         if (completed != null) completed.gameObject.SetActive(complete);
     }
     
+    // ========================================
+    // EMISSION LIGHT CONTROL
+    // ========================================
+
+    /// <summary>
+    /// Strip Unity's " (Instance)" suffix to get the original asset material name.
+    /// </summary>
+    private static string GetBaseMaterialName(string matName)
+    {
+        const string suffix = " (Instance)";
+        if (matName.EndsWith(suffix))
+            return matName.Substring(0, matName.Length - suffix.Length);
+        return matName;
+    }
+
+    /// <summary>
+    /// Scan all ACTIVE renderers on all floors, find materials with _EMISSION keyword,
+    /// cache their original emission colors by base name, then return them.
+    /// </summary>
+    private List<(Material mat, Color origColor)> CollectEmissiveMaterials()
+    {
+        var result = new List<(Material, Color)>();
+        foreach (var floor in floors)
+        {
+            if (floor == null) continue;
+            // false = only ACTIVE renderers (critical for correct material instances)
+            Renderer[] renderers = floor.GetComponentsInChildren<Renderer>(false);
+            foreach (var r in renderers)
+            {
+                if (r == null) continue;
+                foreach (var mat in r.materials)
+                {
+                    if (mat == null) continue;
+                    if (!mat.HasProperty("_EmissionColor")) continue;
+                    if (!mat.IsKeywordEnabled("_EMISSION")) continue;
+
+                    string baseName = GetBaseMaterialName(mat.name);
+
+                    // Cache the original emission color the first time we see this name
+                    if (!knownEmissionColors.ContainsKey(baseName))
+                    {
+                        Color c = mat.GetColor("_EmissionColor");
+                        if (c.r > 0.01f || c.g > 0.01f || c.b > 0.01f)
+                            knownEmissionColors[baseName] = c;
+                    }
+
+                    if (knownEmissionColors.TryGetValue(baseName, out Color origColor))
+                        result.Add((mat, origColor));
+                }
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// At init time: cache original emission colors from fresh materials, then zero them.
+    /// </summary>
+    private void CacheAndZeroEmission()
+    {
+        foreach (var floor in floors)
+        {
+            if (floor == null) continue;
+            Renderer[] renderers = floor.GetComponentsInChildren<Renderer>(true);
+            foreach (var r in renderers)
+            {
+                if (r == null) continue;
+                foreach (var mat in r.materials)
+                {
+                    if (mat == null || !mat.HasProperty("_EmissionColor")) continue;
+                    if (!mat.IsKeywordEnabled("_EMISSION")) continue;
+
+                    string baseName = GetBaseMaterialName(mat.name);
+                    if (!knownEmissionColors.ContainsKey(baseName))
+                    {
+                        Color c = mat.GetColor("_EmissionColor");
+                        if (c.r > 0.01f || c.g > 0.01f || c.b > 0.01f)
+                            knownEmissionColors[baseName] = c;
+                    }
+                    mat.SetColor("_EmissionColor", Color.black);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Turn off emission on ALL active emissive materials in this stack.
+    /// </summary>
+    private void TurnOffEmission()
+    {
+        foreach (var floor in floors)
+        {
+            if (floor == null) continue;
+            Renderer[] renderers = floor.GetComponentsInChildren<Renderer>(false);
+            foreach (var r in renderers)
+            {
+                if (r == null) continue;
+                foreach (var mat in r.materials)
+                {
+                    if (mat == null || !mat.HasProperty("_EmissionColor")) continue;
+                    if (!mat.IsKeywordEnabled("_EMISSION")) continue;
+                    mat.SetColor("_EmissionColor", Color.black);
+                }
+            }
+        }
+    }
+
+    private void StopFlicker()
+    {
+        if (flickerCoroutine != null)
+        {
+            StopCoroutine(flickerCoroutine);
+            flickerCoroutine = null;
+        }
+    }
+
+    /// <summary>
+    /// Smooth flickering light coroutine. Waits one frame for visual state to settle,
+    /// then does a smooth organic flicker ending with lights fully on.
+    /// </summary>
+    private IEnumerator FlickerLightsCoroutine()
+    {
+        // Wait one frame so that SetCompletionVisuals has fully activated children
+        yield return null;
+
+        var emissiveMats = CollectEmissiveMaterials();
+        if (emissiveMats.Count == 0)
+        {
+            flickerCoroutine = null;
+            yield break;
+        }
+
+        // Start dark
+        foreach (var (mat, _) in emissiveMats)
+            mat.SetColor("_EmissionColor", Color.black);
+
+        float totalDuration = 1.4f;
+        float elapsed = 0f;
+
+        while (elapsed < totalDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / totalDuration);
+            float intensity;
+
+            if (t < 0.55f)
+            {
+                // Phase 1: Organic flickering with increasing brightness envelope
+                float phase = t / 0.55f;
+                float flicker = Mathf.Sin(elapsed * 28f) * 0.5f + 0.5f;
+                flicker *= Mathf.Sin(elapsed * 9f) * 0.4f + 0.6f;
+                intensity = flicker * phase * 1.2f;
+            }
+            else
+            {
+                // Phase 2: Smooth stabilization to full brightness
+                float phase = (t - 0.55f) / 0.45f;
+                float smooth = phase * phase * (3f - 2f * phase); // smoothstep
+                intensity = Mathf.Lerp(0.6f, 2f, smooth);
+            }
+
+            foreach (var (mat, origColor) in emissiveMats)
+            {
+                if (mat != null)
+                    mat.SetColor("_EmissionColor", origColor * intensity);
+            }
+            yield return null;
+        }
+
+        // Ensure final state is fully on (intensity 2x)
+        foreach (var (mat, origColor) in emissiveMats)
+        {
+            if (mat != null)
+                mat.SetColor("_EmissionColor", origColor * 2f);
+        }
+
+        flickerCoroutine = null;
+    }
+
     /// <summary>
     /// Check if this stack has no movable floors
     /// </summary>
