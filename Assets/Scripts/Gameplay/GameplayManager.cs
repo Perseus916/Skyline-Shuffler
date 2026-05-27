@@ -711,6 +711,12 @@ public class GameplayManager : MonoBehaviour
     public bool IsLevelComplete() => levelComplete;
     
     /// <summary>
+    /// Returns all building stacks in the current level.
+    /// Used by celebration VFX to position particles on buildings.
+    /// </summary>
+    public List<BuildingStack> GetAllStacks() => allStacks;
+    
+    /// <summary>
     /// Add extra moves (from ad reward or coin purchase).
     /// Called by OutOfMovesUI.
     /// </summary>

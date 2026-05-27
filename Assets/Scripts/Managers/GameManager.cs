@@ -31,6 +31,10 @@ public class GameManager : MonoBehaviour
     [SerializeField] private DailyRewardUI dailyRewardUI;
     [SerializeField] private ShopUI shopUI;
     
+    [Header("Celebration")]
+    [Tooltip("Celebration sequence played before showing the level complete popup. If null, popup shows immediately.")]
+    [SerializeField] private LevelCompleteCelebration celebration;
+    
     [Header("Events")]
     public UnityEvent<int> OnLevelLoaded;
     
@@ -296,7 +300,20 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            if (levelCompleteUI != null)
+            // Try celebration sequence first, fallback to direct popup
+            if (celebration != null)
+            {
+                // Get building stacks from GameplayManager for VFX positioning
+                var buildingStacks = GameplayManager.Instance != null 
+                    ? GameplayManager.Instance.GetAllStacks() 
+                    : null;
+                
+                celebration.PlayCelebration(
+                    levelNumber, movesTaken, optimalMoves, stars, coinsEarned,
+                    levelCompleteUI, buildingStacks
+                );
+            }
+            else if (levelCompleteUI != null)
             {
                 levelCompleteUI.Show(levelNumber, movesTaken, optimalMoves, stars, coinsEarned);
             }

@@ -16,6 +16,11 @@ public class CameraSwipeRotateController : MonoBehaviour
     private float targetYRotation = 0f;
     private bool swipeStartedOnUI = false;
 
+    /// <summary>
+    /// When true, all swipe input is blocked (used during level-complete celebration orbit).
+    /// </summary>
+    public bool CelebrationMode { get; set; }
+
     private void Awake()
     {
         controls = new InputSystem_Actions();
@@ -35,6 +40,18 @@ public class CameraSwipeRotateController : MonoBehaviour
     private void OnDisable() => controls.Disable();
 
     /// <summary>
+    /// Sync the internal target rotation after an external rotation (e.g., celebration orbit).
+    /// Call this after the celebration orbit completes so manual swiping resumes from the correct angle.
+    /// </summary>
+    public void SyncTargetRotation()
+    {
+        if (cameraPivot != null)
+        {
+            targetYRotation = cameraPivot.eulerAngles.y;
+        }
+    }
+
+    /// <summary>
     /// Check if the pointer is currently over any UI element.
     /// </summary>
     private bool IsPointerOverUI()
@@ -52,6 +69,9 @@ public class CameraSwipeRotateController : MonoBehaviour
 
     private void OnSwipeStarted(InputAction.CallbackContext context)
     {
+        // Block all input during celebration
+        if (CelebrationMode) return;
+
         // Block if touching UI
         swipeStartedOnUI = IsPointerOverUI();
         if (swipeStartedOnUI) return;
@@ -75,6 +95,9 @@ public class CameraSwipeRotateController : MonoBehaviour
 
     private void OnSwipeEnded(InputAction.CallbackContext context)
     {
+        // Block all input during celebration
+        if (CelebrationMode) return;
+
         // If swipe started on UI or not during gameplay, ignore
         if (swipeStartedOnUI) return;
         if (isRotating) return;
