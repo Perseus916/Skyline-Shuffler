@@ -58,6 +58,11 @@ public class LevelLoader : MonoBehaviour
             SpawnSlot(slot, offset);
         }
 
+        // Legacy levels may not define every grid coordinate.
+        // Spawn missing coordinates as locked foundations so players see
+        // non-playable bases consistently (black, same as other locked tiles).
+        SpawnMissingLockedSlots(offset);
+
         // Use explicit level number, fallback to data or GameManager
         int resolvedLevel = levelNumber > 0 
             ? levelNumber 
@@ -93,6 +98,9 @@ public class LevelLoader : MonoBehaviour
         {
             SpawnSlot(slot, offset);
         }
+
+        // Keep locked visual coverage consistent for levels that omit some slots.
+        SpawnMissingLockedSlots(offset);
         
         // 3. Restore from saved state (rearranges floors)
         if (gameplayManager != null)
@@ -204,6 +212,38 @@ public class LevelLoader : MonoBehaviour
             foundation.tag = "Floor";
             
             activeStacks.Add(stack);
+        }
+    }
+
+    private void SpawnMissingLockedSlots(float offset)
+    {
+        if (currentLevelData == null) return;
+
+        HashSet<Vector2Int> existing = new HashSet<Vector2Int>();
+        if (currentLevelData.slots != null)
+        {
+            foreach (var slot in currentLevelData.slots)
+            {
+                existing.Add(slot.gridPos);
+            }
+        }
+
+        for (int z = 0; z < currentLevelData.gridDimension; z++)
+        {
+            for (int x = 0; x < currentLevelData.gridDimension; x++)
+            {
+                var pos = new Vector2Int(x, z);
+                if (existing.Contains(pos)) continue;
+
+                SpawnSlot(new SlotData
+                {
+                    gridPos = pos,
+                    isLocked = true,
+                    isEmpty = false,
+                    buildingStyle = null,
+                    floorStyles = new List<BuildingStyleSO>()
+                }, offset);
+            }
         }
     }
 

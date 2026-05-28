@@ -284,4 +284,14 @@ public static class SaveSystem
         Data.inProgressMoves = 0;
         Save();
     }
+
+    /// <summary>
+    /// Debug helper: unlock all levels up to the provided maximum.
+    /// </summary>
+    public static void UnlockAllLevels(int maxLevel)
+    {
+        Data.highestUnlockedLevel = Mathf.Max(1, maxLevel);
+        Data.currentLevel = Mathf.Max(Data.currentLevel, 1);
+        Save();
+    }
 }
