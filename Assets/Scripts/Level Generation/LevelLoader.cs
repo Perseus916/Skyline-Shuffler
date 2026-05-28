@@ -8,7 +8,6 @@ public class LevelLoader : MonoBehaviour
     public LevelDataSO currentLevelData;
 
     [Header("Prefabs")]
-    public GameObject cranePrefab;
     public GameObject foundationPrefab;
 
     [Header("Settings")]
@@ -19,7 +18,7 @@ public class LevelLoader : MonoBehaviour
     [SerializeField] private GameplayManager gameplayManager;
 
     [Header("Hierarchy")]
-    public Transform gridContainer; // All foundations + crane spawn here
+    public Transform gridContainer; // All foundations spawn here
 
     // Internal tracking
     private List<BuildingStack> activeStacks = new List<BuildingStack>();
@@ -52,10 +51,21 @@ public class LevelLoader : MonoBehaviour
         
         currentStackHeight = GetStackHeightFromLevel(currentLevelData);
 
-        // 2. Build the city
-        foreach (SlotData slot in currentLevelData.slots)
+        // 2. Build the complete city grid
+        // Iterate every grid position and spawn a foundation. If the level provides
+        // SlotData for that position, use it; otherwise spawn an empty playable slot.
+        for (int x = 0; x < currentLevelData.gridDimension; x++)
         {
-            SpawnSlot(slot, offset);
+            for (int y = 0; y < currentLevelData.gridDimension; y++)
+            {
+                Vector2Int pos = new Vector2Int(x, y);
+                // Find slot data for this grid position if any
+                SlotData slot = currentLevelData.slots != null
+                    ? currentLevelData.slots.FirstOrDefault(s => s.gridPos == pos)
+                    : null;
+
+                SpawnSlotAtGridPos(pos, slot, offset);
+            }
         }
 
         // Use explicit level number, fallback to data or GameManager
@@ -88,10 +98,18 @@ public class LevelLoader : MonoBehaviour
         
         currentStackHeight = GetStackHeightFromLevel(currentLevelData);
 
-        // 2. Build the city (default layout — will be rearranged)
-        foreach (SlotData slot in currentLevelData.slots)
+        // 2. Build the complete city grid (default layout — will be rearranged)
+        for (int x = 0; x < currentLevelData.gridDimension; x++)
         {
-            SpawnSlot(slot, offset);
+            for (int y = 0; y < currentLevelData.gridDimension; y++)
+            {
+                Vector2Int pos = new Vector2Int(x, y);
+                SlotData slot = currentLevelData.slots != null
+                    ? currentLevelData.slots.FirstOrDefault(s => s.gridPos == pos)
+                    : null;
+
+                SpawnSlotAtGridPos(pos, slot, offset);
+            }
         }
         
         // 3. Restore from saved state (rearranges floors)
@@ -153,37 +171,25 @@ public class LevelLoader : MonoBehaviour
         return resolved;
     }
 
-    private void SpawnCrane(Vector2Int gridPos, float offset)
+    private void SpawnSlotAtGridPos(Vector2Int gridPos, SlotData data, float offset)
     {
-        // Crane is 2 units wide, so we shift it by half a grid space to center it
         Vector3 worldPos = new(
-            (gridPos.x + 0.5f) * gridSpacing - offset,
+            gridPos.x * gridSpacing - offset,
             0,
             gridPos.y * gridSpacing - offset
         );
 
-        Instantiate(cranePrefab, worldPos, Quaternion.identity, gridContainer);
-    }
-
-    private void SpawnSlot(SlotData data, float offset)
-    {
-        Vector3 worldPos = new(
-            data.gridPos.x * gridSpacing - offset,
-            0,
-            data.gridPos.y * gridSpacing - offset
-        );
-
         // Always spawn a foundation mesh
         GameObject foundation = Instantiate(foundationPrefab, worldPos, Quaternion.identity, gridContainer);
-        foundation.name = $"Slot_{data.gridPos.x}_{data.gridPos.y}";
+        foundation.name = $"Slot_{gridPos.x}_{gridPos.y}";
 
-        if (data.isLocked)
+        if (data != null && data.isLocked)
         {
             ApplyLockedVisuals(foundation);
         }
-        else
+        else if (data != null)
         {
-            // All playable slots (with or without floors) need BuildingStack component
+            // Playable slot with data
             BuildingStack stack = foundation.AddComponent<BuildingStack>();
             stack.SetMaxStackHeight(currentStackHeight);
             stack.SetGridPosition(data.gridPos);
@@ -203,6 +209,22 @@ public class LevelLoader : MonoBehaviour
             // Set tag for raycast detection
             foundation.tag = "Floor";
             
+            activeStacks.Add(stack);
+        }
+        else
+        {
+            // No slot data provided: spawn an empty playable slot
+            BuildingStack stack = foundation.AddComponent<BuildingStack>();
+            stack.SetMaxStackHeight(currentStackHeight);
+            stack.SetGridPosition(gridPos);
+
+            // Create a minimal SlotData to initialize as empty
+            var emptyData = new SlotData { gridPos = gridPos };
+            stack.InitializeFromData(emptyData, floorHeight);
+
+            ApplyEmptySlotVisuals(foundation);
+
+            foundation.tag = "Floor";
             activeStacks.Add(stack);
         }
     }
