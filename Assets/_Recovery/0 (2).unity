@@ -12621,6 +12621,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LevelLoader
   currentLevelData: {fileID: 0}
+  cranePrefab: {fileID: 7826178101100112778, guid: 67e42152ad7be604c8f3e1845b7ed3f0, type: 3}
   foundationPrefab: {fileID: 4992704214475371062, guid: 0ff4abbde3ffc3f42b6c09989500cb86, type: 3}
   gridSpacing: 3
   floorHeight: 1
@@ -51861,7 +51862,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &1652555530
 Transform:
   m_ObjectHideFlags: 0
