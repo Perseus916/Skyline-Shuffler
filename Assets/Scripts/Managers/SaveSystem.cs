@@ -229,6 +229,18 @@ public static class SaveSystem
     public static int GetFreeUndos() => Data.freeUndos;
     public static int GetFreeHints() => Data.freeHints;
     
+    public static void SetFreeUndos(int count)
+    {
+        Data.freeUndos = count;
+        Save();
+    }
+    
+    public static void SetFreeHints(int count)
+    {
+        Data.freeHints = count;
+        Save();
+    }
+    
     /// <summary>Use a free undo. Returns true if available.</summary>
     public static bool UseFreeUndo()
     {

@@ -151,6 +151,15 @@ public class GameplayManager : MonoBehaviour
         // Build grid-to-stack mapping for hints
         BuildGridToStackMap();
         
+        // Dynamically set free undos and hints based on level wise pattern (2, 3, 1 repeating)
+        int dynamicCount = 1;
+        int pattern = levelNumber % 3;
+        if (pattern == 1) dynamicCount = 2;
+        else if (pattern == 2) dynamicCount = 3;
+        
+        SaveSystem.SetFreeUndos(dynamicCount);
+        SaveSystem.SetFreeHints(dynamicCount);
+        
         OnMoveCountChanged?.Invoke(moveCount, moveLimit);
         OnUndoCountChanged?.Invoke(SaveSystem.GetFreeUndos());
         OnHintCountChanged?.Invoke(SaveSystem.GetFreeHints());
@@ -745,7 +754,7 @@ public class GameplayManager : MonoBehaviour
     /// </summary>
     public bool TryUndo()
     {
-        if (levelComplete || undoStack.Count == 0) return false;
+        if (levelComplete || isAnimating || undoStack.Count == 0) return false;
         
         // Check consumable availability
         bool hasFree = SaveSystem.UseFreeUndo();
@@ -779,20 +788,84 @@ public class GameplayManager : MonoBehaviour
         BuildingStack from = allStacks[record.toIndex];  // The floor is now here
         BuildingStack to = allStacks[record.fromIndex];    // Move it back here
         
-        // Execute reverse move (instant, no animation delay)
-        var floorData = from.RemoveTopFloor();
-        if (floorData.floorObject != null)
+        // If we have a hook controller, animate hook to source (from) then perform the move in callback
+        if (hookController != null)
         {
-            to.AddFloor(floorData.floorObject, floorData.style, 0.15f);
+            isAnimating = true;
+
+            // Move hook to the current stack (from)
+            hookController.MoveHookToStack(from, 0f, () =>
+            {
+                // Get floor data from source (from)
+                var floorData = from.RemoveTopFloor();
+                if (floorData.floorObject == null)
+                {
+                    isAnimating = false;
+                    return;
+                }
+
+                // Stop hook following during transit
+                hookController.StopFollow();
+
+                // Parent the floor to the hook so it moves horizontally with the crane
+                GameObject floorObj = floorData.floorObject;
+                floorObj.transform.SetParent(hookController.hook);
+                
+                // Position the floor slightly below the hook (compensate for hookOffset y=2)
+                floorObj.transform.localPosition = new Vector3(0f, -hookController.hookOffset.y, 0f);
+
+                // Move hook quickly to the elevated position above target stack (to)
+                Transform targetTop = FindTopFloorTransformOfStack(to);
+                Vector3 targetBasePos = (targetTop != null ? targetTop.position : to.transform.position);
+                Vector3 targetElevatedPos = targetBasePos + hookController.hookOffset + new Vector3(0f, 8f, 0f);
+
+                // We smoothly move hook to this elevated position over 0.2s (fast horizontal transit!)
+                StartCoroutine(MoveHookToPositionCoroutine(targetElevatedPos, 0.2f, () =>
+                {
+                    // Arrived high up above 'to' stack! Now perform the drop.
+                    // First unparent from hook
+                    floorObj.transform.SetParent(null);
+
+                    // Add to target stack (which handles parenting and animates it down over animationDuration)
+                    to.AddFloor(floorObj, floorData.style, animationDuration);
+                    if (AudioManager.Instance != null) AudioManager.Instance.PlayFloorPlace();
+
+                    // Decrement move count
+                    moveCount = Mathf.Max(0, moveCount - 1);
+                    OnMoveCountChanged?.Invoke(moveCount, moveLimit);
+                    OnUndoCountChanged?.Invoke(SaveSystem.GetFreeUndos());
+
+                    // Auto-save
+                    SaveInProgressState();
+
+                    // Smoothly move the hook down to follow the dropped block to its landing spot
+                    Vector3 finalHookPos = to.GetTopFloorWorldPosition() + hookController.hookOffset;
+                    StartCoroutine(MoveHookToPositionCoroutine(finalHookPos, animationDuration, () =>
+                    {
+                        // Now that the hook is down, clear selection and release animation block
+                        DeselectStack(false);
+                        isAnimating = false;
+                    }));
+                }));
+            });
         }
-        
-        // Decrement move count
-        moveCount = Mathf.Max(0, moveCount - 1);
-        OnMoveCountChanged?.Invoke(moveCount, moveLimit);
-        OnUndoCountChanged?.Invoke(SaveSystem.GetFreeUndos());
-        
-        DeselectStack(false);
-        SaveInProgressState();
+        else
+        {
+            // Execute reverse move (instant, no animation delay)
+            var floorData = from.RemoveTopFloor();
+            if (floorData.floorObject != null)
+            {
+                to.AddFloor(floorData.floorObject, floorData.style, 0.15f);
+            }
+            
+            // Decrement move count
+            moveCount = Mathf.Max(0, moveCount - 1);
+            OnMoveCountChanged?.Invoke(moveCount, moveLimit);
+            OnUndoCountChanged?.Invoke(SaveSystem.GetFreeUndos());
+            
+            DeselectStack(false);
+            SaveInProgressState();
+        }
         
         Debug.Log($"<color=yellow>Undo! Move count: {moveCount}/{moveLimit} | Undos left: {SaveSystem.GetFreeUndos()}</color>");
         return true;
