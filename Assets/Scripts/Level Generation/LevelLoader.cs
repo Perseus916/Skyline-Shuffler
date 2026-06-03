@@ -257,7 +257,7 @@ public class LevelLoader : MonoBehaviour
                 var pos = new Vector2Int(x, z);
                 if (existing.Contains(pos)) continue;
 
-                SpawnSlot(new SlotData
+                SpawnSlotAtGridPos(pos, new SlotData
                 {
                     gridPos = pos,
                     isLocked = true,
