@@ -393,10 +393,16 @@ public class GameplayManager : MonoBehaviour
         // Case 1: Nothing selected - try to select this stack smoothly
         if (selectedStack == null)
         {
-            // Can't select empty or ground-only stacks
+            // Can't select empty or ground-only stacks — trigger ground thud shake!
             if (tappedStack.MovableFloorCount > 0)
             {
                 StartCoroutine(AnimateSelectStackFlow(tappedStack));
+            }
+            else if (tappedStack.GroundFloorCount > 0)
+            {
+                // Player tapped an immovable ground/base building — red flash + crazy thud shake!
+                tappedStack.FlashColor(errorColor, 0.35f);
+                TriggerGroundBuildingShake();
             }
             return;
         }
@@ -409,6 +415,7 @@ public class GameplayManager : MonoBehaviour
         }
         
         // Case 3: Different stack tapped - try to move
+        // If target is a completed/locked stack, also shake on rejection
         TryMoveFloor(selectedStack, tappedStack);
     }
     
@@ -1275,6 +1282,53 @@ public class GameplayManager : MonoBehaviour
         {
             StartCoroutine(CameraShakeCoroutine(duration, magnitude));
         }
+    }
+
+    /// <summary>
+    /// Triggers a strong "ground thud" screen shake when the player taps an immovable
+    /// base/ground-floor building. Gives a crazy, satisfying wall-hit impact feel.
+    /// </summary>
+    public void TriggerGroundBuildingShake()
+    {
+        if (mainCamera != null)
+        {
+            StartCoroutine(GroundBuildingShakeCoroutine());
+        }
+    }
+
+    private System.Collections.IEnumerator GroundBuildingShakeCoroutine()
+    {
+        Vector3 originalPos = mainCamera.transform.localPosition;
+
+        // Phase 1: Sudden big impact jolt (very fast, sharp)
+        float impactDuration = 0.07f;
+        float impactMagnitude = 0.12f;
+        float elapsed = 0f;
+        while (elapsed < impactDuration)
+        {
+            float decay = 1f - (elapsed / impactDuration); // starts big, shrinks
+            float x = UnityEngine.Random.Range(-1f, 1f) * impactMagnitude * decay;
+            float y = UnityEngine.Random.Range(-1f, 1f) * impactMagnitude * decay;
+            mainCamera.transform.localPosition = new Vector3(originalPos.x + x, originalPos.y + y, originalPos.z);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        // Phase 2: Gentle rolling aftershock decay
+        float aftershockDuration = 0.18f;
+        float aftershockMagnitude = 0.045f;
+        elapsed = 0f;
+        while (elapsed < aftershockDuration)
+        {
+            float decay = 1f - (elapsed / aftershockDuration);
+            float x = UnityEngine.Random.Range(-1f, 1f) * aftershockMagnitude * decay;
+            float y = UnityEngine.Random.Range(-1f, 1f) * aftershockMagnitude * decay;
+            mainCamera.transform.localPosition = new Vector3(originalPos.x + x, originalPos.y + y, originalPos.z);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        mainCamera.transform.localPosition = originalPos;
     }
 
     private System.Collections.IEnumerator CameraShakeCoroutine(float duration, float magnitude)
