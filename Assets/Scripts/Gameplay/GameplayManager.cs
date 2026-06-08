@@ -73,6 +73,7 @@ public class GameplayManager : MonoBehaviour
     public UnityEvent<int> OnUndoCountChanged;  // remaining undos
     public UnityEvent<int> OnHintCountChanged;  // remaining hints
     public UnityEvent<int> OnCoinsChanged;      // total coins
+    public UnityEvent<int> OnLockedBlockCountChanged; // remaining locked blocks
     
     // State
     private BuildingStack selectedStack;
@@ -164,6 +165,7 @@ public class GameplayManager : MonoBehaviour
         OnUndoCountChanged?.Invoke(SaveSystem.GetFreeUndos());
         OnHintCountChanged?.Invoke(SaveSystem.GetFreeHints());
         OnCoinsChanged?.Invoke(SaveSystem.GetCoins());
+        OnLockedBlockCountChanged?.Invoke(levelLoader != null ? levelLoader.GetLockedSlotCount() : 0);
         
         // Save initial state
         SaveInProgressState();
@@ -228,6 +230,7 @@ public class GameplayManager : MonoBehaviour
         OnUndoCountChanged?.Invoke(SaveSystem.GetFreeUndos());
         OnHintCountChanged?.Invoke(SaveSystem.GetFreeHints());
         OnCoinsChanged?.Invoke(SaveSystem.GetCoins());
+        OnLockedBlockCountChanged?.Invoke(levelLoader != null ? levelLoader.GetLockedSlotCount() : 0);
         
         Debug.Log($"<color=green>Level {currentLevelNumber} RESTORED at move {moveCount}/{moveLimit} (Capacity: {stackHeight})</color>");
 
@@ -743,6 +746,70 @@ public class GameplayManager : MonoBehaviour
     public bool IsPerfectClear(int optimalMoves)
     {
         return moveCount <= optimalMoves + 2;
+    }
+    
+    // ========================================
+    // UNLOCK BLOCK SYSTEM
+    // ========================================
+    
+    /// <summary>
+    /// Unlock one locked block. Costs UNLOCK_COIN_COST coins, or a rewarded ad as fallback.
+    /// </summary>
+    public bool TryUnlockBlock()
+    {
+        if (levelComplete || isAnimating) return false;
+        
+        if (levelLoader == null || levelLoader.GetLockedSlotCount() == 0)
+        {
+            Debug.Log("<color=orange>No locked blocks to unlock!</color>");
+            return false;
+        }
+        
+        const int UNLOCK_COIN_COST = 200;
+        
+        bool spent = SaveSystem.SpendCoins(UNLOCK_COIN_COST);
+        if (!spent)
+        {
+            // Try rewarded ad
+            if (AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady())
+            {
+                AdManager.Instance.ShowFreeUndosAd(() =>
+                {
+                    // On ad complete, unlock for free
+                    PerformUnlockBlock();
+                });
+            }
+            else
+            {
+                Debug.Log("<color=red>Not enough coins to unlock! Need " + UNLOCK_COIN_COST + " coins.</color>");
+            }
+            return false;
+        }
+        
+        OnCoinsChanged?.Invoke(SaveSystem.GetCoins());
+        PerformUnlockBlock();
+        return true;
+    }
+    
+    private void PerformUnlockBlock()
+    {
+        BuildingStack newStack = levelLoader.UnlockOneLockedSlot();
+        if (newStack != null)
+        {
+            // Register the new stack in the game
+            allStacks.Add(newStack);
+            newStack.SetMaxStackHeight(stackHeight);
+            
+            // Add to grid map for hints
+            gridToStackMap[newStack.GridPosition] = newStack;
+            
+            // Flash unlock visual on the new stack
+            newStack.FlashColor(new Color(1f, 0.9f, 0.2f, 1f), 0.6f);
+            
+            OnLockedBlockCountChanged?.Invoke(levelLoader.GetLockedSlotCount());
+            
+            Debug.Log($"<color=green>Block unlocked! Remaining locked: {levelLoader.GetLockedSlotCount()}</color>");
+        }
     }
     
     // ========================================

@@ -22,7 +22,16 @@ public class LevelLoader : MonoBehaviour
 
     // Internal tracking
     private List<BuildingStack> activeStacks = new List<BuildingStack>();
+    private List<LockedSlotEntry> lockedSlots = new List<LockedSlotEntry>();
     private int currentStackHeight;
+
+    /// <summary>Represents a locked slot that can be unlocked at runtime.</summary>
+    public class LockedSlotEntry
+    {
+        public GameObject foundation;
+        public Vector2Int gridPos;
+        public SlotData originalData;
+    }
     
     /// <summary>
     /// Load a level from a specific LevelDataSO (called by GameManager)
@@ -194,6 +203,12 @@ public class LevelLoader : MonoBehaviour
         if (data != null && data.isLocked)
         {
             ApplyLockedVisuals(foundation);
+            lockedSlots.Add(new LockedSlotEntry
+            {
+                foundation = foundation,
+                gridPos = gridPos,
+                originalData = data
+            });
         }
         else if (data != null)
         {
@@ -297,11 +312,48 @@ public class LevelLoader : MonoBehaviour
     public void ClearCurrentLevel()
     {
         activeStacks.Clear();
+        lockedSlots.Clear();
 
         if (gridContainer != null)
         {
             foreach (Transform child in gridContainer) Destroy(child.gameObject);
         }
+    }
+
+    /// <summary>
+    /// Unlock one locked slot at runtime: convert it to a playable empty BuildingStack.
+    /// Returns the newly created BuildingStack, or null if no locked slots remain.
+    /// </summary>
+    public BuildingStack UnlockOneLockedSlot()
+    {
+        if (lockedSlots == null || lockedSlots.Count == 0) return null;
+
+        // Pick the first (or random) locked slot
+        var entry = lockedSlots[0];
+        lockedSlots.RemoveAt(0);
+
+        if (entry.foundation == null) return null;
+
+        // Remove locked visuals by resetting color
+        Renderer rend = entry.foundation.GetComponent<Renderer>();
+        if (rend != null)
+            rend.material.color = new Color(0.6f, 0.6f, 0.6f, 1f);
+
+        // Add BuildingStack component and make it playable
+        BuildingStack stack = entry.foundation.AddComponent<BuildingStack>();
+        stack.SetMaxStackHeight(currentStackHeight);
+        stack.SetGridPosition(entry.gridPos);
+
+        var emptyData = new SlotData { gridPos = entry.gridPos };
+        stack.InitializeFromData(emptyData, floorHeight);
+
+        entry.foundation.tag = "Floor";
+        entry.foundation.name = entry.foundation.name.Replace("_Locked", "_Unlocked");
+
+        activeStacks.Add(stack);
+
+        Debug.Log($"<color=yellow>Unlocked slot at {entry.gridPos}. Remaining locked: {lockedSlots.Count}</color>");
+        return stack;
     }
     
     // ========================================
@@ -311,4 +363,5 @@ public class LevelLoader : MonoBehaviour
     public List<BuildingStack> GetActiveStacks() => activeStacks;
     public int GetStackHeight() => currentStackHeight;
     public LevelDataSO GetCurrentLevelData() => currentLevelData;
+    public int GetLockedSlotCount() => lockedSlots != null ? lockedSlots.Count : 0;
 }
