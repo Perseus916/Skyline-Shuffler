@@ -34,8 +34,8 @@ public class GameplayUI : MonoBehaviour
     [SerializeField] private Button hintButton;
     
     [Header("Undo/Hint Labels")]
-    [SerializeField] private TextMeshProUGUI undoCountText;
-    [SerializeField] private TextMeshProUGUI hintCountText;
+    [SerializeField] private Text undoCountText;
+    [SerializeField] private Text hintCountText;
     
     [Header("Ad Indicators")]
     [SerializeField] private GameObject undoAdIcon;  // Small video icon shown when free = 0
@@ -137,20 +137,12 @@ public class GameplayUI : MonoBehaviour
         bool hasCoins = SaveSystem.GetCoins() >= UNDO_COIN_COST;
         bool hasAd = AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady();
         
-        if (undoCountText != null)
-        {
-            if (hasFree)
-                undoCountText.text = freeCount.ToString();
-            else if (hasCoins)
-                undoCountText.text = $"{UNDO_COIN_COST}";
-            else if (hasAd)
-                undoCountText.text = "📺";
-            else
-                undoCountText.text = "—";
-        }
+        string displayStr = freeCount.ToString();
+            
+        SetButtonText(undoButton, undoCountText, displayStr);
         
-        // Show/hide ad icon
-        if (undoAdIcon != null)
+        // Show/hide ad icon (only if it is a separate GameObject from the button itself)
+        if (undoAdIcon != null && (undoButton == null || undoAdIcon != undoButton.gameObject))
             undoAdIcon.SetActive(!hasFree && !hasCoins && hasAd);
     }
     
@@ -160,21 +152,38 @@ public class GameplayUI : MonoBehaviour
         bool hasCoins = SaveSystem.GetCoins() >= HINT_COIN_COST;
         bool hasAd = AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady();
         
-        if (hintCountText != null)
-        {
-            if (hasFree)
-                hintCountText.text = freeCount.ToString();
-            else if (hasCoins)
-                hintCountText.text = $"{HINT_COIN_COST}";
-            else if (hasAd)
-                hintCountText.text = "📺";
-            else
-                hintCountText.text = "—";
-        }
+        string displayStr = freeCount.ToString();
+            
+        SetButtonText(hintButton, hintCountText, displayStr);
         
-        // Show/hide ad icon
-        if (hintAdIcon != null)
+        // Show/hide ad icon (only if it is a separate GameObject from the button itself)
+        if (hintAdIcon != null && (hintButton == null || hintAdIcon != hintButton.gameObject))
             hintAdIcon.SetActive(!hasFree && !hasCoins && hasAd);
+    }
+
+    private void SetButtonText(Button button, Text textComp, string text)
+    {
+        if (textComp != null)
+        {
+            textComp.text = text;
+        }
+        else if (button != null)
+        {
+            // Fallback: try to find TextMeshProUGUI in children
+            var tmp = button.GetComponentInChildren<TextMeshProUGUI>();
+            if (tmp != null)
+            {
+                tmp.text = text;
+                return;
+            }
+            
+            // Fallback: try to find legacy Text in children
+            var txt = button.GetComponentInChildren<Text>();
+            if (txt != null)
+            {
+                txt.text = text;
+            }
+        }
     }
     
     private void UpdateCoins(int total)

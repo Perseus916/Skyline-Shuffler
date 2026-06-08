@@ -173,11 +173,9 @@ public class LevelGeneratorEditor : EditorWindow
         // Building count scales with difficulty tier
         int buildingCount = GetBuildingCount(level.tier, lvlNum);
         
-        // Empty slots: More = easier. Tutorial/Easy get 2, later get 1
-        int emptySlotCount = (lvlNum <= config.easyEnd) ? 2 : 1;
-        if (level.isBreatherLevel) emptySlotCount = 2; // Breathers are easier
-        
-        int totalPlayableSlots = buildingCount + emptySlotCount;
+        // All grid slots are now playable/usable (no locked slots)
+        int totalPlayableSlots = level.gridDimension * level.gridDimension;
+        int emptySlotCount = totalPlayableSlots - buildingCount;
         
         level.emptySlotCount = emptySlotCount;
         level.buildingStyleCount = Mathf.Min(buildingCount, library.allStyles.Count);
@@ -209,8 +207,8 @@ public class LevelGeneratorEditor : EditorWindow
             {
                 for (int x = 0; x < level.gridDimension; x++)
                 {
-                    // Skip crane positions (2 units wide at top-left)
-                    if (z == level.gridDimension - 1 && (x == 0 || x == 1)) continue;
+                    // Crane positions (0,2) and (1,2) are now playable empty slots
+                    // No positions are skipped — all 9 grid slots are used
 
                     SlotData slot = new SlotData { gridPos = new Vector2Int(x, z) };
 

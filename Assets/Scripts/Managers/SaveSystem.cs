@@ -229,6 +229,18 @@ public static class SaveSystem
     public static int GetFreeUndos() => Data.freeUndos;
     public static int GetFreeHints() => Data.freeHints;
     
+    public static void SetFreeUndos(int count)
+    {
+        Data.freeUndos = count;
+        Save();
+    }
+    
+    public static void SetFreeHints(int count)
+    {
+        Data.freeHints = count;
+        Save();
+    }
+    
     /// <summary>Use a free undo. Returns true if available.</summary>
     public static bool UseFreeUndo()
     {
@@ -282,6 +294,16 @@ public static class SaveSystem
         Data.inProgressLevel = 0;
         Data.inProgressState = "";
         Data.inProgressMoves = 0;
+        Save();
+    }
+
+    /// <summary>
+    /// Debug helper: unlock all levels up to the provided maximum.
+    /// </summary>
+    public static void UnlockAllLevels(int maxLevel)
+    {
+        Data.highestUnlockedLevel = Mathf.Max(1, maxLevel);
+        Data.currentLevel = Mathf.Max(Data.currentLevel, 1);
         Save();
     }
 }
