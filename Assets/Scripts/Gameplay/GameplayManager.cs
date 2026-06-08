@@ -73,6 +73,7 @@ public class GameplayManager : MonoBehaviour
     public UnityEvent<int> OnUndoCountChanged;  // remaining undos
     public UnityEvent<int> OnHintCountChanged;  // remaining hints
     public UnityEvent<int> OnCoinsChanged;      // total coins
+    public UnityEvent<int> OnLockedBlockCountChanged; // remaining locked blocks
     
     // State
     private BuildingStack selectedStack;
@@ -164,6 +165,7 @@ public class GameplayManager : MonoBehaviour
         OnUndoCountChanged?.Invoke(SaveSystem.GetFreeUndos());
         OnHintCountChanged?.Invoke(SaveSystem.GetFreeHints());
         OnCoinsChanged?.Invoke(SaveSystem.GetCoins());
+        OnLockedBlockCountChanged?.Invoke(levelLoader != null ? levelLoader.GetLockedSlotCount() : 0);
         
         // Save initial state
         SaveInProgressState();
@@ -228,6 +230,7 @@ public class GameplayManager : MonoBehaviour
         OnUndoCountChanged?.Invoke(SaveSystem.GetFreeUndos());
         OnHintCountChanged?.Invoke(SaveSystem.GetFreeHints());
         OnCoinsChanged?.Invoke(SaveSystem.GetCoins());
+        OnLockedBlockCountChanged?.Invoke(levelLoader != null ? levelLoader.GetLockedSlotCount() : 0);
         
         Debug.Log($"<color=green>Level {currentLevelNumber} RESTORED at move {moveCount}/{moveLimit} (Capacity: {stackHeight})</color>");
 
@@ -390,10 +393,16 @@ public class GameplayManager : MonoBehaviour
         // Case 1: Nothing selected - try to select this stack smoothly
         if (selectedStack == null)
         {
-            // Can't select empty or ground-only stacks
+            // Can't select empty or ground-only stacks — trigger ground thud shake!
             if (tappedStack.MovableFloorCount > 0)
             {
                 StartCoroutine(AnimateSelectStackFlow(tappedStack));
+            }
+            else if (tappedStack.GroundFloorCount > 0)
+            {
+                // Player tapped an immovable ground/base building — red flash + crazy thud shake!
+                tappedStack.FlashColor(errorColor, 0.35f);
+                TriggerGroundBuildingShake();
             }
             return;
         }
@@ -406,6 +415,7 @@ public class GameplayManager : MonoBehaviour
         }
         
         // Case 3: Different stack tapped - try to move
+        // If target is a completed/locked stack, also shake on rejection
         TryMoveFloor(selectedStack, tappedStack);
     }
     
@@ -743,6 +753,70 @@ public class GameplayManager : MonoBehaviour
     public bool IsPerfectClear(int optimalMoves)
     {
         return moveCount <= optimalMoves + 2;
+    }
+    
+    // ========================================
+    // UNLOCK BLOCK SYSTEM
+    // ========================================
+    
+    /// <summary>
+    /// Unlock one locked block. Costs UNLOCK_COIN_COST coins, or a rewarded ad as fallback.
+    /// </summary>
+    public bool TryUnlockBlock()
+    {
+        if (levelComplete || isAnimating) return false;
+        
+        if (levelLoader == null || levelLoader.GetLockedSlotCount() == 0)
+        {
+            Debug.Log("<color=orange>No locked blocks to unlock!</color>");
+            return false;
+        }
+        
+        const int UNLOCK_COIN_COST = 200;
+        
+        bool spent = SaveSystem.SpendCoins(UNLOCK_COIN_COST);
+        if (!spent)
+        {
+            // Try rewarded ad
+            if (AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady())
+            {
+                AdManager.Instance.ShowFreeUndosAd(() =>
+                {
+                    // On ad complete, unlock for free
+                    PerformUnlockBlock();
+                });
+            }
+            else
+            {
+                Debug.Log("<color=red>Not enough coins to unlock! Need " + UNLOCK_COIN_COST + " coins.</color>");
+            }
+            return false;
+        }
+        
+        OnCoinsChanged?.Invoke(SaveSystem.GetCoins());
+        PerformUnlockBlock();
+        return true;
+    }
+    
+    private void PerformUnlockBlock()
+    {
+        BuildingStack newStack = levelLoader.UnlockOneLockedSlot();
+        if (newStack != null)
+        {
+            // Register the new stack in the game
+            allStacks.Add(newStack);
+            newStack.SetMaxStackHeight(stackHeight);
+            
+            // Add to grid map for hints
+            gridToStackMap[newStack.GridPosition] = newStack;
+            
+            // Flash unlock visual on the new stack
+            newStack.FlashColor(new Color(1f, 0.9f, 0.2f, 1f), 0.6f);
+            
+            OnLockedBlockCountChanged?.Invoke(levelLoader.GetLockedSlotCount());
+            
+            Debug.Log($"<color=green>Block unlocked! Remaining locked: {levelLoader.GetLockedSlotCount()}</color>");
+        }
     }
     
     // ========================================
@@ -1208,6 +1282,53 @@ public class GameplayManager : MonoBehaviour
         {
             StartCoroutine(CameraShakeCoroutine(duration, magnitude));
         }
+    }
+
+    /// <summary>
+    /// Triggers a strong "ground thud" screen shake when the player taps an immovable
+    /// base/ground-floor building. Gives a crazy, satisfying wall-hit impact feel.
+    /// </summary>
+    public void TriggerGroundBuildingShake()
+    {
+        if (mainCamera != null)
+        {
+            StartCoroutine(GroundBuildingShakeCoroutine());
+        }
+    }
+
+    private System.Collections.IEnumerator GroundBuildingShakeCoroutine()
+    {
+        Vector3 originalPos = mainCamera.transform.localPosition;
+
+        // Phase 1: Sudden big impact jolt (very fast, sharp)
+        float impactDuration = 0.07f;
+        float impactMagnitude = 0.12f;
+        float elapsed = 0f;
+        while (elapsed < impactDuration)
+        {
+            float decay = 1f - (elapsed / impactDuration); // starts big, shrinks
+            float x = UnityEngine.Random.Range(-1f, 1f) * impactMagnitude * decay;
+            float y = UnityEngine.Random.Range(-1f, 1f) * impactMagnitude * decay;
+            mainCamera.transform.localPosition = new Vector3(originalPos.x + x, originalPos.y + y, originalPos.z);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        // Phase 2: Gentle rolling aftershock decay
+        float aftershockDuration = 0.18f;
+        float aftershockMagnitude = 0.045f;
+        elapsed = 0f;
+        while (elapsed < aftershockDuration)
+        {
+            float decay = 1f - (elapsed / aftershockDuration);
+            float x = UnityEngine.Random.Range(-1f, 1f) * aftershockMagnitude * decay;
+            float y = UnityEngine.Random.Range(-1f, 1f) * aftershockMagnitude * decay;
+            mainCamera.transform.localPosition = new Vector3(originalPos.x + x, originalPos.y + y, originalPos.z);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        mainCamera.transform.localPosition = originalPos;
     }
 
     private System.Collections.IEnumerator CameraShakeCoroutine(float duration, float magnitude)

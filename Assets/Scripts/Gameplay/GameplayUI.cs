@@ -32,10 +32,16 @@ public class GameplayUI : MonoBehaviour
     [SerializeField] private Button restartButton;
     [SerializeField] private Button undoButton;
     [SerializeField] private Button hintButton;
+    [SerializeField] private Button unlockButton;  // Unlocks one locked block
     
     [Header("Undo/Hint Labels")]
     [SerializeField] private Text undoCountText;
     [SerializeField] private Text hintCountText;
+    
+    [Header("Unlock Button")]
+    [SerializeField] private Text unlockCountText;       // Shows remaining locked blocks
+    [SerializeField] private GameObject unlockAdIcon;    // Shown when player has no coins but ad ready
+    [SerializeField] private GameObject unlockButtonRoot; // Parent to hide when no locked blocks
     
     [Header("Ad Indicators")]
     [SerializeField] private GameObject undoAdIcon;  // Small video icon shown when free = 0
@@ -44,6 +50,7 @@ public class GameplayUI : MonoBehaviour
     // Costs (must match GameplayManager)
     private const int UNDO_COIN_COST = 75;
     private const int HINT_COIN_COST = 150;
+    private const int UNLOCK_COIN_COST = 200;
     
     private void OnEnable()
     {
@@ -53,6 +60,7 @@ public class GameplayUI : MonoBehaviour
             gameplayManager.OnUndoCountChanged.AddListener(UpdateUndoCount);
             gameplayManager.OnHintCountChanged.AddListener(UpdateHintCount);
             gameplayManager.OnCoinsChanged.AddListener(UpdateCoins);
+            gameplayManager.OnLockedBlockCountChanged.AddListener(UpdateUnlockButton);
         }
         
         pauseButton?.onClick.RemoveAllListeners();
@@ -60,12 +68,14 @@ public class GameplayUI : MonoBehaviour
         restartButton?.onClick.RemoveAllListeners();
         undoButton?.onClick.RemoveAllListeners();
         hintButton?.onClick.RemoveAllListeners();
+        unlockButton?.onClick.RemoveAllListeners();
         
         pauseButton?.onClick.AddListener(OnPauseClicked);
         homeButton?.onClick.AddListener(OnHomeClicked);
         restartButton?.onClick.AddListener(OnRestartClicked);
         undoButton?.onClick.AddListener(OnUndoClicked);
         hintButton?.onClick.AddListener(OnHintClicked);
+        unlockButton?.onClick.AddListener(OnUnlockClicked);
         
         // Show level number
         if (levelNumberText != null && GameManager.Instance != null)
@@ -78,6 +88,8 @@ public class GameplayUI : MonoBehaviour
         UpdateUndoCount(SaveSystem.GetFreeUndos());
         UpdateHintCount(SaveSystem.GetFreeHints());
         UpdateTotalStars();
+        // Unlock button: start with 0 locked (will be refreshed via event when level loads)
+        UpdateUnlockButton(0);
         
         if (gameplayManager != null)
         {
@@ -93,6 +105,7 @@ public class GameplayUI : MonoBehaviour
             gameplayManager.OnUndoCountChanged.RemoveListener(UpdateUndoCount);
             gameplayManager.OnHintCountChanged.RemoveListener(UpdateHintCount);
             gameplayManager.OnCoinsChanged.RemoveListener(UpdateCoins);
+            gameplayManager.OnLockedBlockCountChanged.RemoveListener(UpdateUnlockButton);
         }
     }
     
@@ -195,12 +208,57 @@ public class GameplayUI : MonoBehaviour
         UpdateUndoCount(SaveSystem.GetFreeUndos());
         UpdateHintCount(SaveSystem.GetFreeHints());
         UpdateTotalStars();
+        
+        // Refresh unlock button ad icon state when coins change
+        bool hasCoinsForUnlock = total >= UNLOCK_COIN_COST;
+        bool hasAdForUnlock = AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady();
+        if (unlockAdIcon != null && (unlockButton == null || unlockAdIcon != unlockButton.gameObject))
+        {
+            // Only show ad icon if there are still locked blocks (button is visible and interactable)
+            bool unlockVisible = unlockButton != null && unlockButton.gameObject.activeSelf;
+            unlockAdIcon.SetActive(unlockVisible && !hasCoinsForUnlock && hasAdForUnlock);
+        }
     }
 
     private void UpdateTotalStars()
     {
         if (totalStarsText != null)
             totalStarsText.text = $"{SaveSystem.GetTotalStars()}";
+    }
+    
+    /// <summary>
+    /// Update the Unlock button's label and visibility based on how many locked blocks remain.
+    /// </summary>
+    private void UpdateUnlockButton(int lockedCount)
+    {
+        // Hide the entire unlock button root if there are no locked blocks
+        if (unlockButtonRoot != null)
+        {
+            unlockButtonRoot.SetActive(lockedCount > 0);
+        }
+        else if (unlockButton != null)
+        {
+            unlockButton.gameObject.SetActive(lockedCount > 0);
+        }
+        
+        // Update the count label
+        if (unlockCountText != null)
+            unlockCountText.text = lockedCount.ToString();
+        else if (unlockButton != null)
+        {
+            var tmp = unlockButton.GetComponentInChildren<TextMeshProUGUI>();
+            if (tmp != null) tmp.text = lockedCount.ToString();
+        }
+        
+        // Show/hide ad icon
+        bool hasCoins = SaveSystem.GetCoins() >= UNLOCK_COIN_COST;
+        bool hasAd = AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady();
+        if (unlockAdIcon != null && (unlockButton == null || unlockAdIcon != unlockButton.gameObject))
+            unlockAdIcon.SetActive(lockedCount > 0 && !hasCoins && hasAd);
+        
+        // Disable button if nothing to unlock
+        if (unlockButton != null)
+            unlockButton.interactable = lockedCount > 0;
     }
     
     private void OnPauseClicked()
@@ -231,5 +289,11 @@ public class GameplayUI : MonoBehaviour
     {
         if (gameplayManager != null)
             gameplayManager.TryShowHint();
+    }
+    
+    private void OnUnlockClicked()
+    {
+        if (gameplayManager != null)
+            gameplayManager.TryUnlockBlock();
     }
 }

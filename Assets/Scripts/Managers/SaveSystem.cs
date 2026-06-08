@@ -117,11 +117,14 @@ public static class SaveSystem
     /// </summary>
     public static void SetLevelProgress(int levelNumber, int stars, int moves)
     {
+        if (levelNumber <= 0) return; // Safety guard
+
         var existing = Data.levelProgress.Find(e => e.levelNumber == levelNumber);
         
         if (existing != null)
         {
-            existing.progress.stars = stars;
+            // Keep the BEST (highest) star count, never downgrade
+            existing.progress.stars = Mathf.Max(existing.progress.stars, stars);
             if (!existing.progress.completed || moves < existing.progress.bestMoves)
                 existing.progress.bestMoves = moves;
             existing.progress.completed = true;
@@ -140,13 +143,13 @@ public static class SaveSystem
             });
         }
         
-        // Unlock next level
+        // Unlock next level only (do NOT create a progress entry for it)
         if (levelNumber >= Data.highestUnlockedLevel)
         {
             Data.highestUnlockedLevel = levelNumber + 1;
         }
         
-        // Update current level
+        // Update current level pointer
         Data.currentLevel = levelNumber + 1;
         
         // Clear in-progress since level is complete

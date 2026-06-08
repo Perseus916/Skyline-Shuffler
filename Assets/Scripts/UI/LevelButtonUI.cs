@@ -6,7 +6,7 @@ using TMPro;
 /// Level Select Button
 /// Handles:
 /// - Locked / Unlocked state
-/// - Stars
+/// - Stars (show only earned stars)
 /// - Level Number
 /// - Button click
 /// </summary>
@@ -17,15 +17,12 @@ public class LevelButtonUI : MonoBehaviour
 
     [Header("UNLOCK SECTION")]
     [SerializeField] private GameObject unlockRoot;
-
     [SerializeField] private TextMeshProUGUI levelNumberText;
 
     [Header("Stars")]
-    [SerializeField] private Image[] stars;
-
-    [SerializeField] private Color activeStarColor = Color.white;
-
-    [SerializeField] private Color inactiveStarColor = Color.black;
+    // NOTE: Assign the Star (1), Star (2), Star (3) GameObjects here.
+    // These must be GameObjects, not Image components.
+    [SerializeField] private GameObject[] stars;
 
     [SerializeField] private Image unlockBackground;
 
@@ -34,7 +31,6 @@ public class LevelButtonUI : MonoBehaviour
 
     [Header("Colors")]
     [SerializeField] private Color normalLevelColor = Color.white;
-
     [SerializeField] private Color completedLevelColor = new Color(1f, 0.85f, 0.2f);
 
     private int levelNumber;
@@ -47,11 +43,16 @@ public class LevelButtonUI : MonoBehaviour
         levelNumber = level;
 
         bool isUnlocked = SaveSystem.IsLevelUnlocked(level);
-
         LevelProgress progress = SaveSystem.GetLevelProgress(level);
 
         //------------------------------------
-        // SHOW / HIDE LOCK & UNLOCK SECTION
+        // STEP 1: Hide ALL stars immediately.
+        // Must run before unlockRoot is activated.
+        //------------------------------------
+        HideAllStars();
+
+        //------------------------------------
+        // STEP 2: Show/Hide lock & unlock panels
         //------------------------------------
         if (unlockRoot != null)
             unlockRoot.SetActive(isUnlocked);
@@ -60,66 +61,89 @@ public class LevelButtonUI : MonoBehaviour
             lockRoot.SetActive(!isUnlocked);
 
         //------------------------------------
-        // BUTTON INTERACTABLE
+        // STEP 3: Button interactable
         //------------------------------------
         if (button != null)
         {
             button.interactable = isUnlocked;
-
             button.onClick.RemoveAllListeners();
             button.onClick.AddListener(OnClick);
         }
 
         //------------------------------------
-        // LEVEL NUMBER
+        // STEP 4: Level number
         //------------------------------------
         if (levelNumberText != null)
             levelNumberText.text = level.ToString();
 
         //------------------------------------
-        // STARS
+        // STEP 5: Stars
+        // Only show stars that were actually earned.
+        // 0-star levels (newly unlocked, not yet played) show nothing.
         //------------------------------------
-        SetupStars(progress.stars);
+        if (isUnlocked && progress.stars > 0)
+            ShowEarnedStars(progress.stars);
 
         //------------------------------------
-        // COMPLETED COLOR
+        // STEP 6: Background color
         //------------------------------------
         if (unlockBackground != null)
         {
-            if (progress.completed)
-                unlockBackground.color = completedLevelColor;
-            else
-                unlockBackground.color = normalLevelColor;
+            unlockBackground.color = progress.completed
+                ? completedLevelColor
+                : normalLevelColor;
         }
     }
 
     //========================================================
-// STARS
-//========================================================
-private void SetupStars(int starCount)
-{
-    if (stars == null || stars.Length == 0)
+    // STARS
+    //========================================================
+
+    /// <summary>
+    /// Hides the Stars container AND every individual star.
+    /// Called at the very top of Setup() so no star is ever
+    /// visible before we explicitly decide to show it.
+    /// </summary>
+    private void HideAllStars()
     {
-        Debug.LogWarning($"[LevelButtonUI] Stars array is null or empty on {gameObject.name}");
-        return;
+        if (stars == null || stars.Length == 0) return;
+
+        // Hide the Stars container parent (hides all stars at once)
+        if (stars[0] != null)
+            stars[0].transform.parent.gameObject.SetActive(false);
+
+        // Also deactivate each star individually as a safety net
+        foreach (var star in stars)
+        {
+            if (star != null)
+                star.SetActive(false);
+        }
     }
 
-    Debug.Log($"[LevelButtonUI] Setting {starCount} stars out of {stars.Length} on Level {levelNumber}");
-
-    for (int i = 0; i < stars.Length; i++)
+    /// <summary>
+    /// Activates the Stars container and shows only [starCount] stars.
+    /// Stars beyond starCount remain hidden.
+    /// </summary>
+    private void ShowEarnedStars(int starCount)
     {
-        if (stars[i] != null)
-            stars[i].color = inactiveStarColor;
-        else
-            Debug.LogWarning($"[LevelButtonUI] stars[{i}] is NULL on {gameObject.name}");
+        if (stars == null || stars.Length == 0)
+        {
+            Debug.LogWarning($"[LevelButtonUI] Stars array is null/empty on {gameObject.name}");
+            return;
+        }
+
+        // Activate the Stars container so children can be visible
+        if (stars[0] != null)
+            stars[0].transform.parent.gameObject.SetActive(true);
+
+        // Show only the earned stars; hide the rest
+        for (int i = 0; i < stars.Length; i++)
+        {
+            if (stars[i] != null)
+                stars[i].SetActive(i < starCount);
+        }
     }
 
-    for (int i = 0; i < starCount && i < stars.Length; i++)
-    {
-        if (stars[i] != null)
-            stars[i].color = activeStarColor;
-    }
-}
     //========================================================
     // BUTTON CLICK
     //========================================================
@@ -131,12 +155,8 @@ private void SetupStars(int starCount)
         LevelSelectUI levelSelectUI = GetComponentInParent<LevelSelectUI>();
 
         if (levelSelectUI != null)
-        {
             levelSelectUI.OnLevelSelected(levelNumber);
-        }
         else if (GameManager.Instance != null)
-        {
             GameManager.Instance.PlayLevel(levelNumber);
-        }
     }
 }
