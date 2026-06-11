@@ -12,6 +12,10 @@ public class HomeMenuUI : MonoBehaviour
     [SerializeField] private Button playButton;
     [SerializeField] private Button levelsButton;
     [SerializeField] private Button settingsButton;
+    [SerializeField] private Button shopButton;
+    [SerializeField] private ShopManager shopManager;
+
+
 
     [Header("Panels")]
     [SerializeField] private GameObject settingsPanel;
@@ -28,13 +32,22 @@ public class HomeMenuUI : MonoBehaviour
 
     private void SetupButtons()
     {
+
         playButton?.onClick.RemoveAllListeners();
         levelsButton?.onClick.RemoveAllListeners();
         settingsButton?.onClick.RemoveAllListeners();
+        shopButton?.onClick.RemoveAllListeners();
 
         playButton?.onClick.AddListener(OnPlayClicked);
+
         levelsButton?.onClick.AddListener(OnLevelsClicked);
         settingsButton?.onClick.AddListener(OnSettingsClicked);
+        shopButton?.onClick.AddListener(OnShopClicked);
+
+        // (Assigned via Inspector) open shop on click.
+        // Note: SetupButtons currently wires OnShopClicked; method implemented below.
+
+
     }
 
     private void UpdateUI()
@@ -96,6 +109,17 @@ public class HomeMenuUI : MonoBehaviour
         if (AudioManager.Instance != null)
             AudioManager.Instance.PlayButtonClick();
         StartCoroutine(LevelsButtonAnimation());
+    }
+
+    private void OnShopClicked()
+    {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
+        if (shopManager != null)
+            shopManager.OpenShop();
+        else if (GameManager.Instance != null)
+            GameManager.Instance.ShowShop();
     }
 
     private IEnumerator LevelsButtonAnimation()

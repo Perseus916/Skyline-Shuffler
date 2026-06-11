@@ -82,17 +82,34 @@ public class GameManager : MonoBehaviour
     private void Update()
     {
         var keyboard = Keyboard.current;
-        if (keyboard == null || !keyboard.nKey.wasPressedThisFrame)
+        if (keyboard == null)
             return;
 
-        SaveSystem.UnlockAllLevels(totalLevelsAvailable);
-        Debug.Log($"<color=yellow>Debug unlock enabled: all levels 1-{totalLevelsAvailable} unlocked.</color>");
-
-        if (levelSelectPanel != null && levelSelectPanel.activeSelf)
+        // Existing debug: unlock all levels on N
+        if (keyboard.nKey.wasPressedThisFrame)
         {
-            ShowLevelSelect();
+            SaveSystem.UnlockAllLevels(totalLevelsAvailable);
+            Debug.Log($"<color=yellow>Debug unlock enabled: all levels 1-{totalLevelsAvailable} unlocked.</color>");
+
+            if (levelSelectPanel != null && levelSelectPanel.activeSelf)
+            {
+                ShowLevelSelect();
+            }
+        }
+
+        // Testing: press C to add 5000 coins
+        if (keyboard.cKey.wasPressedThisFrame)
+        {
+            SaveSystem.AddCoins(5000);
+            Debug.Log("<color=cyan>Debug: +5000 coins (C)</color>");
+
+            // Optionally refresh coin display if any GameplayUI is active (GameplayUI listens to events already)
+            // but we ensure OnCoinsChanged is triggered via SaveSystem.
+            // SaveSystem.AddCoins already calls Save(), but does not invoke gameplay events.
+            // Those events are only fired by gameplay UI update loops.
         }
     }
+
     
     // ========================================
     // PANEL MANAGEMENT
