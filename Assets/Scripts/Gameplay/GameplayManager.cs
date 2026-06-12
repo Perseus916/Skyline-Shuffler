@@ -829,38 +829,34 @@ public class GameplayManager : MonoBehaviour
     public bool TryUndo()
     {
         if (levelComplete || isAnimating || undoStack.Count == 0) return false;
-        
-        // Check consumable availability
+        // Only allow undo if player has at least 1 free undo.
+        // When none are available, open the shop instead of spending coins/ads.
+        if (SaveSystem.GetFreeUndos() <= 0)
+        {
+            var shop = FindFirstObjectByType<ShopManager>();
+            if (shop != null)
+                shop.OpenShop();
+            else if (GameManager.Instance != null)
+                GameManager.Instance.ShowShop();
+            return false;
+        }
+
+        // Consume one free undo.
         bool hasFree = SaveSystem.UseFreeUndo();
         if (!hasFree)
         {
-            // Try spending coins
-            if (!SaveSystem.SpendCoins(75))
-            {
-                // Offer ad as last resort
-                if (AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady())
-                {
-                    AdManager.Instance.ShowFreeUndosAd(() =>
-                    {
-                        SaveSystem.AddFreeUndos(3);
-                        OnUndoCountChanged?.Invoke(SaveSystem.GetFreeUndos());
-                        // Now execute the undo since player earned it
-                        TryUndo();
-                    });
-                }
-                else
-                {
-                    Debug.Log("<color=red>No undos available! No free undos, coins, or ads.</color>");
-                }
-                return false;
-            }
-            OnCoinsChanged?.Invoke(SaveSystem.GetCoins());
+            // Shouldn't happen due to GetFreeUndos check, but keep behavior safe.
+            var shop = FindFirstObjectByType<ShopManager>();
+            if (shop != null)
+                shop.OpenShop();
+            return false;
         }
-        
+
         // Pop last move
         var record = undoStack.Pop();
         BuildingStack from = allStacks[record.toIndex];  // The floor is now here
         BuildingStack to = allStacks[record.fromIndex];    // Move it back here
+
         
         // If we have a hook controller, animate hook to source (from) then perform the move in callback
         if (hookController != null)
@@ -1084,30 +1080,30 @@ public class GameplayManager : MonoBehaviour
         // Check consumable availability (skip if unlimited hints enabled)
         if (!unlimitedHintsEnabled)
         {
+            // Only allow hint if player has at least 1 free hint.
+            // When none are available, open the shop instead of spending coins/ads.
+            if (SaveSystem.GetFreeHints() <= 0)
+            {
+                if (GameManager.Instance != null)
+                    GameManager.Instance.ShowShop();
+                return false;
+            }
+
+
             bool hasFree = SaveSystem.UseFreeHint();
             if (!hasFree)
             {
-                if (!SaveSystem.SpendCoins(150))
-                {
-                    // Offer ad as last resort
-                    if (AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady())
-                    {
-                        AdManager.Instance.ShowFreeHintAd(() =>
-                        {
-                            SaveSystem.AddFreeHints(1);
-                            OnHintCountChanged?.Invoke(SaveSystem.GetFreeHints());
-                            TryShowHint();
-                        });
-                    }
-                    else
-                    {
-                        Debug.Log("<color=red>No hints available! No free hints, coins, or ads.</color>");
-                    }
-                    return false;
-                }
-                OnCoinsChanged?.Invoke(SaveSystem.GetCoins());
+            // Shouldn't happen due to GetFreeHints check, but keep behavior safe.
+            var shop = FindFirstObjectByType<ShopManager>();
+            if (shop != null)
+                shop.OpenShop();
+            else if (GameManager.Instance != null)
+                GameManager.Instance.ShowShop();
+            return false;
+
             }
         }
+
         
         // Highlight the hint stacks
         hintFrom.FlashColor(new Color(0.3f, 0.7f, 1f, 1f), 1.5f); // Blue flash on source
