@@ -730,11 +730,6 @@ public class GameplayManager : MonoBehaviour
     /// </summary>
     public bool TryUndo()
     {
-<<<<<<< Updated upstream
-        if (levelComplete || undoStack.Count == 0) return false;
-        
-        // Check consumable availability
-=======
         if (levelComplete || isAnimating || undoStack.Count == 0) return false;
 
         // Only allow undo if player has at least 1 free undo.
@@ -752,7 +747,6 @@ public class GameplayManager : MonoBehaviour
 
 
         // Consume one free undo.
->>>>>>> Stashed changes
         bool hasFree = SaveSystem.UseFreeUndo();
         if (!hasFree)
         {
