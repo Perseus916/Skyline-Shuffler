@@ -13,40 +13,57 @@ public class BuildingStack : MonoBehaviour
     // All floors in one unified list (ground at index 0 if present)
     private readonly List<GameObject> floors = new();
     private readonly List<BuildingStyleSO> floorStyleData = new();
-    
+
     // Ground floor tracking (ground is in floors list but can't be removed)
     private int groundFloorCount = 0; // 0 or 1
-    
+
     // Positioning constants
     private const float FIRST_FLOOR_LOCAL_Y = 2.5f;
     private float localFloorSpacing;
     private Vector3 compensatedScale;
     private int maxStackHeight;
-    
+
     // Grid position tracking for hints
     private Vector2Int gridPosition;
     public Vector2Int GridPosition => gridPosition;
-    
+
     // Completion state
     private bool isCompleted;
     public bool IsCompleted => isCompleted;
-    
+
+    [Header("NPC Waypoint Auto-Creation")]
+    [Tooltip("Automatically create a waypoint at the building when it becomes completed.")]
+    [SerializeField] bool createWaypointOnComplete = true;
+
+    [Tooltip("Maximum search radius (world units) to find nearby existing waypoints to connect to. If none found, nearest will be used.")]
+    [SerializeField] float waypointConnectionRadius = 6f;
+
+    [Tooltip("How many nearby waypoints to connect the created waypoint to (usually 1).")]
+    [SerializeField] int waypointMaxConnections = 1;
+
+    // Reference to the generated completion waypoint (if any)
+    private Waypoint completionWaypoint;
+
+    [Header("NPC On Complete")]
+    [Tooltip("Maximum distance (world units). Only NPCs within this range will be considered. Set to 0 or negative for no limit.")]
+    [SerializeField] float npcSendMaxDistance = 10f;
+
     // Selection state
     private bool isSelected;
     private Renderer foundationRenderer;
     private Color originalColor;
-    
+
     // Animation
     private Coroutine currentAnimation;
 
     // Emission light control
     private Coroutine flickerCoroutine;
     private static readonly Dictionary<string, Color> knownEmissionColors = new();
-    
+
     // ========================================
     // INITIALIZATION
     // ========================================
-    
+
     /// <summary>
     /// Initialize stack from level data.
     /// Ground floor goes into floors[0], movable floors after it.
@@ -57,7 +74,7 @@ public class BuildingStack : MonoBehaviour
         foundationRenderer = GetComponent<Renderer>();
         if (foundationRenderer != null)
             originalColor = foundationRenderer.material.color;
-        
+
         // Calculate scale compensation
         Vector3 parentScale = transform.localScale;
         compensatedScale = new Vector3(
@@ -65,25 +82,25 @@ public class BuildingStack : MonoBehaviour
             1f / parentScale.y,
             1f / parentScale.z
         );
-        
+
         localFloorSpacing = floorHeight / parentScale.y;
-        
+
         int floorIndex = 0;
-        
+
         // 1. Ground floor (goes into floors list at index 0, but can't be removed)
         if (data.buildingStyle != null && data.buildingStyle.groundPrefab != null)
         {
             float localY = FIRST_FLOOR_LOCAL_Y + (floorIndex * localFloorSpacing);
-            
+
             GameObject ground = Instantiate(data.buildingStyle.groundPrefab, Vector3.zero, Quaternion.identity, this.transform);
             ground.transform.localPosition = new Vector3(0, localY, 0);
             ground.transform.localScale = compensatedScale;
             ground.name = "GroundFloor";
-            
+
             floors.Add(ground);
             floorStyleData.Add(data.buildingStyle);
             groundFloorCount = 1;
-            
+
             floorIndex++;
         }
 
@@ -93,7 +110,7 @@ public class BuildingStack : MonoBehaviour
             for (int i = 0; i < data.floorStyles.Count; i++)
             {
                 if (data.floorStyles[i] == null || data.floorStyles[i].floorPrefab == null) continue;
-                
+
                 float localY = FIRST_FLOOR_LOCAL_Y + (floorIndex * localFloorSpacing);
 
                 GameObject floor = Instantiate(data.floorStyles[i].floorPrefab, Vector3.zero, Quaternion.identity, this.transform);
@@ -115,10 +132,10 @@ public class BuildingStack : MonoBehaviour
         // Stop any ongoing flicker and cache original emission colors
         StopFlicker();
         CacheAndZeroEmission();
-        
+
         Debug.Log($"<color=cyan>Stack initialized: {floors.Count} total floors ({groundFloorCount} ground, {MovableFloorCount} movable)</color>");
     }
-    
+
     /// <summary>
     /// Set max MOVABLE floor capacity for this stack.
     /// Ground floor (if present) is separate and does not consume this limit.
@@ -127,7 +144,7 @@ public class BuildingStack : MonoBehaviour
     {
         maxStackHeight = height;
     }
-    
+
     /// <summary>
     /// Set this stack's grid position for hint system tracking.
     /// </summary>
@@ -135,20 +152,20 @@ public class BuildingStack : MonoBehaviour
     {
         gridPosition = pos;
     }
-    
+
     // ========================================
     // GAMEPLAY API
     // ========================================
-    
+
     /// <summary>Total floor count (ground + movable)</summary>
     public int FloorCount => floors.Count;
-    
+
     /// <summary>Only movable floors (excludes ground)</summary>
     public int MovableFloorCount => floors.Count - groundFloorCount;
-    
+
     /// <summary>Number of ground floors (0 or 1)</summary>
     public int GroundFloorCount => groundFloorCount;
-    
+
     /// <summary>
     /// Get the buildingName of each floor for save state serialization.
     /// Returns all floors bottom-to-top (ground first if present).
@@ -171,7 +188,7 @@ public class BuildingStack : MonoBehaviour
     {
         return new List<BuildingStyleSO>(floorStyleData);
     }
-    
+
     /// <summary>
     /// Check if stack can receive a floor of the given style.
     /// Rules: not full (movable capacity), not completed, and top must match OR stack has no movable floors.
@@ -180,13 +197,13 @@ public class BuildingStack : MonoBehaviour
     {
         // Completed stacks are locked
         if (isCompleted) return false;
-        
+
         // Check movable capacity (ground does NOT count).
         // Temporary no-ground stacks can hold one extra movable floor so their
         // total visible height can match grounded stacks.
         int effectiveMaxHeight = maxHeight + (groundFloorCount == 0 ? 1 : 0);
         if (MovableFloorCount >= effectiveMaxHeight) return false;
-        
+
         // Same-type rule applies only when destination already has movable floors.
         // If stack is empty or has only ground floor, any style may be placed.
         if (incomingStyle != null && MovableFloorCount > 0)
@@ -195,10 +212,10 @@ public class BuildingStack : MonoBehaviour
             if (topStyle != incomingStyle)
                 return false;
         }
-        
+
         return true;
     }
-    
+
     /// <summary>
     /// Get the style of the top floor (ground or movable, whichever is on top)
     /// </summary>
@@ -207,7 +224,7 @@ public class BuildingStack : MonoBehaviour
         if (floorStyleData.Count == 0) return null;
         return floorStyleData[floorStyleData.Count - 1];
     }
-    
+
     /// <summary>
     /// Remove and return the top floor.
     /// Cannot remove ground floor (it's permanent).
@@ -217,30 +234,32 @@ public class BuildingStack : MonoBehaviour
         // Can't remove if empty or only ground remains
         if (floors.Count <= groundFloorCount)
             return (null, null);
-        
+
         // If was completed, revert visuals before removing
         if (isCompleted)
         {
             isCompleted = false;
             SetCompletionVisuals(false);
+            // Remove any auto-created waypoint when reverting
+            RemoveCompletionWaypoint();
         }
-        
+
         int lastIndex = floors.Count - 1;
         GameObject floor = floors[lastIndex];
         BuildingStyleSO style = floorStyleData[lastIndex];
-        
+
         floors.RemoveAt(lastIndex);
         floorStyleData.RemoveAt(lastIndex);
-        
+
         // Unparent from this stack
         floor.transform.SetParent(null);
-        
+
         StopFlicker();
         TurnOffEmission();
-        
+
         return (floor, style);
     }
-    
+
     /// <summary>
     /// Add a floor on top of this stack
     /// </summary>
@@ -248,18 +267,18 @@ public class BuildingStack : MonoBehaviour
     {
         // Calculate target position (index in full list)
         int floorIndex = floors.Count;
-        
+
         float localY = FIRST_FLOOR_LOCAL_Y + (floorIndex * localFloorSpacing);
         Vector3 targetLocalPos = new Vector3(0, localY, 0);
-        
+
         // Parent to this stack
         floor.transform.SetParent(this.transform);
         floor.transform.localScale = compensatedScale;
         floor.name = $"Floor_{floors.Count}";
-        
+
         floors.Add(floor);
         floorStyleData.Add(style);
-        
+
         if (animDuration > 0 && gameObject.activeInHierarchy)
         {
             if (currentAnimation != null) StopCoroutine(currentAnimation);
@@ -269,17 +288,17 @@ public class BuildingStack : MonoBehaviour
         {
             floor.transform.localPosition = targetLocalPos;
         }
-        
+
         if (!IsComplete())
         {
             StopFlicker();
             TurnOffEmission();
         }
-        
+
         // Check if stack just became complete
         CheckCompletion();
     }
-    
+
     private IEnumerator AnimateFloorToPosition(GameObject floor, Vector3 targetLocalPos, float duration)
     {
         Vector3 startPos = floor.transform.localPosition;
@@ -287,7 +306,7 @@ public class BuildingStack : MonoBehaviour
         Vector3 targetScale = compensatedScale;
 
         float elapsed = 0f;
-        
+
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
@@ -300,7 +319,7 @@ public class BuildingStack : MonoBehaviour
 
             yield return null;
         }
-        
+
         floor.transform.localPosition = targetLocalPos;
         floor.transform.localScale = targetScale;
         currentAnimation = null;
@@ -357,7 +376,7 @@ public class BuildingStack : MonoBehaviour
         {
             elapsed += Time.deltaTime;
             float t = Mathf.Clamp01(elapsed / duration);
-            
+
             // Peak glow at t = 0.2, then fade back to original
             float factor = t < 0.2f ? (t / 0.2f) : (1f - (t - 0.2f) / 0.8f);
 
@@ -367,7 +386,7 @@ public class BuildingStack : MonoBehaviour
                 for (int i = 0; i < r.materials.Length; i++)
                 {
                     if (i >= originalColors[r].Count) break;
-                    
+
                     Color orig = originalColors[r][i];
                     Color current = Color.Lerp(orig, glowColor, factor * 0.45f); // Soft mix
 
@@ -386,25 +405,25 @@ public class BuildingStack : MonoBehaviour
             for (int i = 0; i < r.materials.Length; i++)
             {
                 if (i >= originalColors[r].Count) break;
-                
+
                 var mat = r.materials[i];
                 if (mat.HasProperty("_Color")) mat.color = originalColors[r][i];
                 else if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", originalColors[r][i]);
             }
         }
     }
-    
+
     // ========================================
     // SELECTION & VISUALS
     // ========================================
-    
+
     /// <summary>
     /// Set selection state with visual highlight and floor elevation
     /// </summary>
     public void SetSelected(bool selected, Color highlightColor)
     {
         isSelected = selected;
-        
+
         // Change foundation color
         if (foundationRenderer != null)
         {
@@ -500,7 +519,7 @@ public class BuildingStack : MonoBehaviour
         Vector3 localPos = new Vector3(0, localY, 0);
         return transform.TransformPoint(localPos);
     }
-    
+
     /// <summary>
     /// Brief color flash for feedback
     /// </summary>
@@ -509,23 +528,23 @@ public class BuildingStack : MonoBehaviour
         if (gameObject.activeInHierarchy)
             StartCoroutine(FlashColorCoroutine(flashColor, duration));
     }
-    
+
     private IEnumerator FlashColorCoroutine(Color flashColor, float duration)
     {
         if (foundationRenderer == null) yield break;
-        
+
         Color startColor = foundationRenderer.material.color;
         foundationRenderer.material.color = flashColor;
-        
+
         yield return new WaitForSeconds(duration);
-        
+
         foundationRenderer.material.color = isSelected ? startColor : originalColor;
     }
-    
+
     // ========================================
     // COMPLETION SYSTEM
     // ========================================
-    
+
     /// <summary>
     /// Complete = FULL (at max capacity) AND all floors are the same type.
     /// Only grounded stacks can be truly complete/locked.
@@ -542,13 +561,13 @@ public class BuildingStack : MonoBehaviour
 
         // Empty = satisfied for win condition
         if (floors.Count == 0) return true;
-        
+
         // Only ground floor = vacant building, satisfied
         if (floors.Count <= groundFloorCount) return true;
-        
+
         // Must be at movable capacity to be truly "complete"
         if (MovableFloorCount < maxStackHeight) return false;
-        
+
         // All floors (including ground) must be the same type
         BuildingStyleSO firstStyle = floorStyleData[0];
         for (int i = 1; i < floorStyleData.Count; i++)
@@ -556,10 +575,10 @@ public class BuildingStack : MonoBehaviour
             if (floorStyleData[i] != firstStyle)
                 return false;
         }
-        
+
         return true;
     }
-    
+
     /// <summary>
     /// Check completion and trigger visuals if newly complete.
     /// Only locks stacks that are truly full and uniform.
@@ -579,19 +598,33 @@ public class BuildingStack : MonoBehaviour
 
         // Don't lock empty or ground-only stacks
         if (floors.Count <= groundFloorCount) return;
-        
+
         bool nowComplete = IsComplete();
-        
+
         if (nowComplete && !isCompleted)
         {
             isCompleted = true;
             SetCompletionVisuals(true);
-            
+
             // Trigger the smooth flickering light effect!
             StopFlicker();
             flickerCoroutine = StartCoroutine(FlickerLightsCoroutine());
 
             Debug.Log($"<color=green>🏙️ Stack complete! All {floors.Count} floors matched.</color>");
+
+            // Trigger NPCs to enter
+            if (NPCManager.Instance != null)
+            {
+                int sendCount = Mathf.Max(1, NPCManager.Instance.NpcCount);
+                float maxDist = (npcSendMaxDistance > 0f) ? npcSendMaxDistance : Mathf.Infinity;
+                NPCManager.Instance.SendNPCsToBuilding(this, sendCount, maxDist);
+            }
+
+            // Auto-create a completion waypoint and connect it to nearby waypoints
+            if (createWaypointOnComplete)
+            {
+                CreateCompletionWaypoint();
+            }
         }
         else if (!nowComplete && isCompleted)
         {
@@ -600,6 +633,9 @@ public class BuildingStack : MonoBehaviour
 
             StopFlicker();
             TurnOffEmission();
+
+            // Remove any auto-created waypoint when stack is no longer complete
+            RemoveCompletionWaypoint();
         }
     }
 
@@ -612,6 +648,8 @@ public class BuildingStack : MonoBehaviour
         SetCompletionVisuals(false);
         StopFlicker();
         TurnOffEmission();
+
+        RemoveCompletionWaypoint();
     }
 
     /// <summary>
@@ -638,9 +676,15 @@ public class BuildingStack : MonoBehaviour
             isCompleted = true;
             SetCompletionVisuals(true);
             StopFlicker();
-            
+
             // Turn lights on instantly (intensity 2x)
             flickerCoroutine = StartCoroutine(TurnOnLightsInstantCoroutine());
+
+            // If configured, create the completion waypoint for stacks that start complete
+            if (createWaypointOnComplete)
+            {
+                CreateCompletionWaypoint();
+            }
         }
         else
         {
@@ -659,10 +703,10 @@ public class BuildingStack : MonoBehaviour
             if (mat != null)
                 mat.SetColor("_EmissionColor", origColor * 2f);
         }
-        
+
         flickerCoroutine = null;
     }
-    
+
     /// <summary>
     /// Toggle CompleteBuilding/IncompleteBuilding children on ALL floors.
     /// Floor prefab expected structure:
@@ -678,16 +722,16 @@ public class BuildingStack : MonoBehaviour
                 ToggleFloorVisuals(floor, complete);
         }
     }
-    
+
     private void ToggleFloorVisuals(GameObject floor, bool complete)
     {
         Transform incomplete = floor.transform.Find("IncompleteBuilding");
         Transform completed = floor.transform.Find("CompleteBuilding");
-        
+
         if (incomplete != null) incomplete.gameObject.SetActive(!complete);
         if (completed != null) completed.gameObject.SetActive(complete);
     }
-    
+
     // ========================================
     // EMISSION LIGHT CONTROL
     // ========================================
@@ -870,4 +914,92 @@ public class BuildingStack : MonoBehaviour
     /// Check if this stack has no movable floors
     /// </summary>
     public bool IsEmpty => MovableFloorCount == 0;
+
+    // =====================
+    // Waypoint creation
+    // =====================
+
+    private void CreateCompletionWaypoint()
+    {
+        if (completionWaypoint != null) return;
+
+        // Create a new GameObject and add Waypoint component
+        GameObject go = new GameObject($"Waypoint_Complete_{gameObject.name}");
+        Vector3 pos = GetTopFloorWorldPosition();
+        go.transform.position = pos;
+        go.transform.SetParent(this.transform);
+
+        Waypoint wp = go.AddComponent<Waypoint>();
+        wp.activeWhenBuildingComplete = true;
+        wp.buildingOnWaypoint = this;
+
+        completionWaypoint = wp;
+
+        // Find nearby existing waypoints to connect to
+        Waypoint[] all = FindObjectsOfType<Waypoint>();
+        List<Waypoint> candidates = new List<Waypoint>();
+        foreach (var w in all)
+        {
+            if (w == null) continue;
+            if (w == completionWaypoint) continue;
+            // skip waypoints that belong to this stack
+            if (w.buildingOnWaypoint == this) continue;
+            candidates.Add(w);
+        }
+
+        // Sort candidates by distance
+        candidates.Sort((a, b) =>
+        {
+            float da = Vector3.SqrMagnitude(a.transform.position - pos);
+            float db = Vector3.SqrMagnitude(b.transform.position - pos);
+            return da.CompareTo(db);
+        });
+
+        int connected = 0;
+        // First try to connect to those within the configured radius
+        foreach (var c in candidates)
+        {
+            if (connected >= waypointMaxConnections) break;
+            float d = Vector3.Distance(c.transform.position, pos);
+            if (d <= waypointConnectionRadius)
+            {
+                if (!wp.connectedWaypoints.Contains(c)) wp.connectedWaypoints.Add(c);
+                if (!c.connectedWaypoints.Contains(wp)) c.connectedWaypoints.Add(wp);
+                connected++;
+            }
+        }
+
+        // If none connected and at least one candidate exists, connect to nearest regardless of radius
+        if (connected == 0 && candidates.Count > 0)
+        {
+            var c = candidates[0];
+            if (!wp.connectedWaypoints.Contains(c)) wp.connectedWaypoints.Add(c);
+            if (!c.connectedWaypoints.Contains(wp)) c.connectedWaypoints.Add(wp);
+        }
+    }
+
+    private void RemoveCompletionWaypoint()
+    {
+        if (completionWaypoint == null) return;
+
+        // Remove this waypoint from connected neighbors
+        var connections = new List<Waypoint>(completionWaypoint.connectedWaypoints);
+        foreach (var w in connections)
+        {
+            if (w == null) continue;
+            if (w.connectedWaypoints.Contains(completionWaypoint))
+                w.connectedWaypoints.Remove(completionWaypoint);
+        }
+
+        // Destroy the waypoint GameObject
+        if (completionWaypoint != null)
+        {
+            var go = completionWaypoint.gameObject;
+            completionWaypoint = null;
+            if (go != null)
+            {
+                Destroy(go);
+            }
+        }
+    }
 }
