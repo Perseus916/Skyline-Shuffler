@@ -91,7 +91,7 @@ public class ProgressSettingsUI : MonoBehaviour
             levelsCompletedText.text = $"Levels Completed: {completed}";
 
         if (totalStarsText != null)
-            totalStarsText.text = $"Total Stars: ⭐ {totalStars}";
+            totalStarsText.text = $"Total Stars: {totalStars}";
 
         if (coinsText != null)
             coinsText.text = $"Coins: 💰 {coins}";
@@ -176,6 +176,13 @@ public class ProgressSettingsUI : MonoBehaviour
         gameObject.SetActive(false);
 
         if (settingsPanel != null)
+        {
             settingsPanel.SetActive(true);
+            SettingsUI settingsUI = settingsPanel.GetComponent<SettingsUI>();
+            if (settingsUI != null)
+            {
+                settingsUI.ShowSettingsMenu();
+            }
+        }
     }
 }

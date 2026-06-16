@@ -752,7 +752,7 @@ public class GameManager : MonoBehaviour
             }
         }
         
-        Debug.Log($"<color=green>Level {levelNumber} complete! ⭐{stars} | +{coinsEarned} coins | Wrong moves: {wrongMoves} | Moves: {movesTaken}/{optimalMoves}</color>");
+        Debug.Log($"<color=green>Level {levelNumber} complete! Stars: {stars} | +{coinsEarned} coins | Wrong moves: {wrongMoves} | Moves: {movesTaken}/{optimalMoves}</color>");
     }
     
     public int CalculateStars(int wrongMoves)

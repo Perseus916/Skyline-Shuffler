@@ -52,7 +52,7 @@ public class LevelSelectUI : MonoBehaviour
     private void UpdateStarsDisplay()
     {
         if (totalStarsText != null)
-            totalStarsText.text = $"⭐ {SaveSystem.GetTotalStars()}";
+            totalStarsText.text = $"{SaveSystem.GetTotalStars()}";
     }
     
     private void OnBackClicked()

@@ -280,7 +280,7 @@ public class GameplayManager : MonoBehaviour
     
     private void Update()
     {
-        if (levelComplete || isAnimating) return;
+        if (levelComplete || isAnimating || Time.timeScale == 0f) return;
         
         // Check for 'H' key to toggle unlimited hints
         var keyboard = Keyboard.current;
