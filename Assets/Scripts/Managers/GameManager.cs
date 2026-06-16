@@ -85,7 +85,9 @@ public class GameManager : MonoBehaviour
         if (keyboard == null)
             return;
 
-        // Existing debug: unlock all levels on N
+        // DEBUG (temporary): unlock all levels on N.
+        // Commented out while we remove unintended free progression.
+        /*
         if (keyboard.nKey.wasPressedThisFrame)
         {
             SaveSystem.UnlockAllLevels(totalLevelsAvailable);
@@ -96,6 +98,8 @@ public class GameManager : MonoBehaviour
                 ShowLevelSelect();
             }
         }
+        */
+
 
         // Testing: press C to add 5000 coins
         if (keyboard.cKey.wasPressedThisFrame)
