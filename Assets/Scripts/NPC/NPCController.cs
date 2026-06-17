@@ -101,6 +101,30 @@ public class NPCController : MonoBehaviour
         if (targetWaypoint == null)
             return;
 
+        // Ensure the target waypoint is actually directly connected to the current waypoint.
+        // If it's not, pick the nearest connected waypoint instead. This prevents "skipping"
+        // to farther waypoints that may be connected in the graph but not intended as the next step.
+        if (currentWaypoint != null && targetWaypoint != null && !currentWaypoint.connectedWaypoints.Contains(targetWaypoint))
+        {
+            Waypoint nearest = null;
+            float bestDist = float.MaxValue;
+            foreach (var w in currentWaypoint.connectedWaypoints)
+            {
+                if (w == null) continue;
+                float d = Vector3.SqrMagnitude(w.transform.position - transform.position);
+                if (d < bestDist)
+                {
+                    bestDist = d;
+                    nearest = w;
+                }
+            }
+
+            if (nearest != null)
+            {
+                targetWaypoint = nearest;
+            }
+        }
+
         // Update cooldown timer
         if (reverseCooldownTimer > 0f)
             reverseCooldownTimer -= Time.deltaTime;

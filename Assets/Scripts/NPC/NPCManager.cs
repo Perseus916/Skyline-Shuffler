@@ -5,7 +5,8 @@ public class NPCManager : MonoBehaviour
 {
     public static NPCManager Instance { get; private set; }
 
-    [SerializeField] NPCController npcPrefab;
+    [SerializeField]
+    List<NPCController> npcPrefabs = new List<NPCController>();
 
     [SerializeField]
     List<Waypoint> spawnWaypoints =
@@ -32,6 +33,18 @@ public class NPCManager : MonoBehaviour
 
     void Start()
     {
+        if (npcPrefabs == null || npcPrefabs.Count == 0)
+        {
+            Debug.LogWarning("NPCManager: No NPC prefabs assigned. No NPCs will be spawned.");
+            return;
+        }
+
+        if (spawnWaypoints == null || spawnWaypoints.Count == 0)
+        {
+            Debug.LogWarning("NPCManager: No spawn waypoints assigned. No NPCs will be spawned.");
+            return;
+        }
+
         SpawnNPCs();
     }
 
@@ -44,9 +57,12 @@ public class NPCManager : MonoBehaviour
                     Random.Range(0,
                     spawnWaypoints.Count)];
 
+            // Pick a random prefab variant
+            NPCController prefab = npcPrefabs[Random.Range(0, npcPrefabs.Count)];
+
             NPCController npc =
                 Instantiate(
-                    npcPrefab,
+                    prefab,
                     spawnPoint.transform.position,
                     Quaternion.identity);
 
