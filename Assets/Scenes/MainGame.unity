@@ -13102,6 +13102,7 @@ MonoBehaviour:
   - {fileID: 829272371}
   npcCount: 20
   npcinbuilding: 5
+  spawnOnStart: 0
 --- !u!4 &617919051
 Transform:
   m_ObjectHideFlags: 0

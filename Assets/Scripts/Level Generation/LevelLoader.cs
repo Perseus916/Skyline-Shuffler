@@ -96,6 +96,12 @@ public class LevelLoader : MonoBehaviour
         {
             gameplayManager.InitializeLevel(currentLevelData, activeStacks, currentStackHeight, resolvedLevel);
         }
+
+        // Spawn NPCs now that the level geometry/stacks exist. Safe null-check in case NPCManager isn't present.
+        if (NPCManager.Instance != null)
+        {
+            NPCManager.Instance.SpawnNPCs();
+        }
     }
     
     /// <summary>

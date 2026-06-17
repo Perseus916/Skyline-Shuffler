@@ -20,6 +20,9 @@ public class NPCManager : MonoBehaviour
     // Public read-only accessor for other systems to use as "how many NPCs to send"
     public int NpcCount => npcinbuilding;
 
+    // When true, NPCManager will auto-spawn in Start(). Set false to control spawning externally.
+    [SerializeField] private bool spawnOnStart = false;
+
     void Awake()
     {
         if (Instance != null && Instance != this)
@@ -33,38 +36,52 @@ public class NPCManager : MonoBehaviour
 
     void Start()
     {
+        if (!spawnOnStart) return;
+
+        SpawnNPCs();
+    }
+
+    // Make spawning callable from other systems (LevelLoader will call this when the level is generated)
+    public void SpawnNPCs()
+    {
         if (npcPrefabs == null || npcPrefabs.Count == 0)
         {
-            Debug.LogWarning("NPCManager: No NPC prefabs assigned. No NPCs will be spawned.");
+            Debug.LogWarning("NPCManager.SpawnNPCs: No NPC prefabs assigned. Aborting spawn.");
             return;
         }
 
         if (spawnWaypoints == null || spawnWaypoints.Count == 0)
         {
-            Debug.LogWarning("NPCManager: No spawn waypoints assigned. No NPCs will be spawned.");
+            Debug.LogWarning("NPCManager.SpawnNPCs: No spawn waypoints assigned. Aborting spawn.");
             return;
         }
 
-        SpawnNPCs();
-    }
-
-    void SpawnNPCs()
-    {
-        for (int i = 0; i < npcCount; i++)
+        // Count existing alive NPCs tracked by NPCController
+        int existing = 0;
+        var all = NPCController.AllNPCs;
+        if (all != null)
         {
-            Waypoint spawnPoint =
-                spawnWaypoints[
-                    Random.Range(0,
-                    spawnWaypoints.Count)];
+            for (int i = 0; i < all.Count; i++)
+            {
+                if (all[i] != null) existing++;
+            }
+        }
+
+        int toSpawn = Mathf.Max(0, npcCount - existing);
+        if (toSpawn == 0)
+        {
+            // Desired count already met or exceeded; do nothing.
+            return;
+        }
+
+        for (int i = 0; i < toSpawn; i++)
+        {
+            Waypoint spawnPoint = spawnWaypoints[Random.Range(0, spawnWaypoints.Count)];
 
             // Pick a random prefab variant
             NPCController prefab = npcPrefabs[Random.Range(0, npcPrefabs.Count)];
 
-            NPCController npc =
-                Instantiate(
-                    prefab,
-                    spawnPoint.transform.position,
-                    Quaternion.identity);
+            NPCController npc = Instantiate(prefab, spawnPoint.transform.position, Quaternion.identity);
 
             npc.Initialize(spawnPoint);
         }
