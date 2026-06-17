@@ -6,9 +6,6 @@ public class NPCController : MonoBehaviour
     [SerializeField] float moveSpeed = 2f;
     [SerializeField] float rotationSpeed = 5f;
 
-    // Debugging
-    [SerializeField] bool debugLogs = true;
-
     // Separation settings
     [SerializeField] float separationRadius = 1f;
     [SerializeField] float separationStrength = 2f;
@@ -28,6 +25,11 @@ public class NPCController : MonoBehaviour
     [SerializeField] float stuckDistanceThreshold = 0.05f; // movement threshold per check
     [SerializeField] float stuckReverseCooldown = 3f; // seconds to wait after reversing
 
+    // Enter-building settings
+    [SerializeField] float enterApproachSpeedMultiplier = 1.5f;
+    [SerializeField] float enterReachDistance = 0.35f;
+    [SerializeField] float vanishDelay = 0.6f; // time to scale down before destroy
+
     private Waypoint currentWaypoint;
     private Waypoint targetWaypoint;
     private Waypoint previousWaypoint;
@@ -35,6 +37,7 @@ public class NPCController : MonoBehaviour
 
     // Track all NPC instances for simple local avoidance
     private static readonly List<NPCController> allNPCs = new List<NPCController>();
+    public static List<NPCController> AllNPCs => allNPCs;
 
     // Collider for penetration checks
     private Collider myCollider;
@@ -44,11 +47,10 @@ public class NPCController : MonoBehaviour
     private float stuckTimer = 0f;
     private float reverseCooldownTimer = 0f;
 
-    // One-time warnings to avoid log spam
-    private bool warnedNoTarget = false;
-    private bool warnedNoGround = false;
-    private bool warnedNoWaypoint = false;
-    private bool warnedAnimatorParam = false;
+    // Enter-building state
+    private bool isEnteringBuilding = false;
+    public bool IsEnteringBuilding => isEnteringBuilding;
+    private Vector3 enterTarget;
 
     void Awake()
     {
@@ -69,12 +71,6 @@ public class NPCController : MonoBehaviour
 
     public void Initialize(Waypoint startWaypoint)
     {
-        if (startWaypoint == null)
-        {
-            if (debugLogs) Debug.LogError("NPC.Initialize called with null startWaypoint on " + name);
-            return;
-        }
-
         currentWaypoint = startWaypoint;
         // Snap to ground at start
         Vector3 pos = startWaypoint.transform.position;
@@ -85,27 +81,25 @@ public class NPCController : MonoBehaviour
         stuckTimer = 0f;
         reverseCooldownTimer = 0f;
 
-        if (debugLogs) Debug.Log(name + " initialized at waypoint " + startWaypoint.name + " pos=" + transform.position);
-
         ChooseNextWaypoint();
-
-        if (targetWaypoint == null && debugLogs)
-        {
-            Debug.LogWarning(name + " has no targetWaypoint after Initialize");
-        }
     }
 
     void Update()
     {
-        if (targetWaypoint == null)
+        if (isEnteringBuilding)
         {
-            if (debugLogs && !warnedNoTarget)
-            {
-                Debug.LogWarning(name + " targetWaypoint is null. NPC will not move.");
-                warnedNoTarget = true;
-            }
+            MoveToEnterTarget();
             return;
         }
+
+        // If target is inactive for any reason, pick another
+        if (targetWaypoint != null && !targetWaypoint.IsActive())
+        {
+            ChooseNextWaypoint();
+        }
+
+        if (targetWaypoint == null)
+            return;
 
         // Update cooldown timer
         if (reverseCooldownTimer > 0f)
@@ -127,13 +121,90 @@ public class NPCController : MonoBehaviour
         // If stuck longer than threshold and cooldown allows, reverse direction
         if (stuckTimer >= stuckTimeThreshold && reverseCooldownTimer <= 0f)
         {
-            if (debugLogs) Debug.Log(name + " appears stuck. Attempting reverse.");
             HandleStuckReverse();
             stuckTimer = 0f;
             reverseCooldownTimer = stuckReverseCooldown;
         }
 
         lastPosition = transform.position;
+    }
+
+    /// <summary>
+    /// Called by NPCManager (or other game systems) to send this NPC to a building entry point and disappear.
+    /// </summary>
+    public void StartEnterBuilding(Vector3 entryPosition)
+    {
+        isEnteringBuilding = true;
+        enterTarget = entryPosition;
+
+        // Stop regular waypoint movement
+        targetWaypoint = null;
+
+        // Optionally trigger enter animation
+        if (animator != null)
+        {
+            animator.SetFloat("Speed", 0f);
+            if (animator.HasState(0, Animator.StringToHash("Enter")))
+            {
+                animator.SetTrigger("Enter");
+            }
+        }
+
+        // Disable collider so NPC won't block others while entering
+        if (myCollider != null)
+        {
+            myCollider.enabled = false;
+        }
+    }
+
+    void MoveToEnterTarget()
+    {
+        // Move directly toward enterTarget on XZ plane
+        Vector3 flatTarget = new Vector3(enterTarget.x, 0f, enterTarget.z);
+        Vector3 flatPos = new Vector3(transform.position.x, 0f, transform.position.z);
+        Vector3 dir = (flatTarget - flatPos);
+        float dist = dir.magnitude;
+        if (dist <= enterReachDistance)
+        {
+            // Reached entry; vanish
+            StartCoroutine(VanishAndDestroy());
+            return;
+        }
+
+        Vector3 moveDir = dir.normalized;
+        float speed = moveSpeed * enterApproachSpeedMultiplier;
+
+        Vector3 tentativeXZ = flatPos + moveDir * speed * Time.deltaTime;
+        Vector3 tentativeWorld = new Vector3(tentativeXZ.x, transform.position.y, tentativeXZ.z);
+
+        // Keep on ground if possible
+        float groundY = SampleGroundHeight(tentativeWorld);
+        transform.position = new Vector3(tentativeXZ.x, groundY, tentativeXZ.z);
+
+        if (moveDir != Vector3.zero)
+        {
+            Quaternion targetRotation = Quaternion.LookRotation(new Vector3(moveDir.x, 0f, moveDir.z));
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+        }
+    }
+
+    System.Collections.IEnumerator VanishAndDestroy()
+    {
+        // Small delay to allow enter animation or effects
+        float elapsed = 0f;
+        Vector3 startScale = transform.localScale;
+        while (elapsed < vanishDelay)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / vanishDelay);
+            float s = Mathf.Lerp(1f, 0f, t);
+            transform.localScale = startScale * s;
+            yield return null;
+        }
+
+        // Finally destroy the NPC
+        Destroy(this.gameObject);
+        yield break;
     }
 
     void HandleStuckReverse()
@@ -146,30 +217,15 @@ public class NPCController : MonoBehaviour
             targetWaypoint = previousWaypoint;
             previousWaypoint = currentWaypoint;
             currentWaypoint = oldTarget; // set current to old target so path logic stays consistent
-
-            if (debugLogs) Debug.Log(name + " reversed to previous waypoint: " + targetWaypoint.name);
         }
         else
         {
             // Fallback: pick a random different connected waypoint
-            if (currentWaypoint == null)
-            {
-                if (debugLogs && !warnedNoWaypoint) Debug.LogWarning(name + " cannot reverse because currentWaypoint is null");
-                warnedNoWaypoint = true;
-                return;
-            }
-
             List<Waypoint> options = new List<Waypoint>(currentWaypoint.connectedWaypoints);
             if (options.Count > 1)
             {
                 options.Remove(targetWaypoint);
                 targetWaypoint = options[Random.Range(0, options.Count)];
-                if (debugLogs) Debug.Log(name + " chose fallback waypoint: " + targetWaypoint.name);
-            }
-            else if (debugLogs && !warnedNoWaypoint)
-            {
-                Debug.LogWarning(name + " has no alternate connected waypoints to reverse to.");
-                warnedNoWaypoint = true;
             }
         }
     }
@@ -189,13 +245,6 @@ public class NPCController : MonoBehaviour
 
     void MoveToWaypoint()
     {
-        if (targetWaypoint == null)
-        {
-            if (debugLogs && !warnedNoTarget) Debug.LogWarning(name + " MoveToWaypoint called but targetWaypoint is null");
-            warnedNoTarget = true;
-            return;
-        }
-
         Vector3 targetPos = targetWaypoint.transform.position;
 
         // Compute desired direction only in XZ plane to avoid moving vertically
@@ -203,14 +252,6 @@ public class NPCController : MonoBehaviour
         Vector3 flatPos = new Vector3(transform.position.x, 0f, transform.position.z);
 
         Vector3 desiredDir = (flatTarget - flatPos).normalized;
-
-        if (desiredDir.sqrMagnitude < 0.0001f)
-        {
-            if (debugLogs) Debug.Log(name + " desiredDir is zero - already at target XZ or degenerate direction");
-            // Still call ChooseNextWaypoint to avoid stalling on same target
-            ChooseNextWaypoint();
-            return;
-        }
 
         // Compute simple separation from other NPCs (XZ only)
         Vector3 separation = Vector3.zero;
@@ -241,12 +282,6 @@ public class NPCController : MonoBehaviour
 
         Vector3 moveDir = (desiredDir + separation * separationStrength).normalized;
 
-        if (moveDir.sqrMagnitude < 0.0001f)
-        {
-            if (debugLogs) Debug.Log(name + " moveDir is zero after separation adjustments - not moving this frame");
-            return;
-        }
-
         // Compute tentative new position (XZ) and sample ground there
         Vector3 tentativeXZ = new Vector3(transform.position.x, 0f, transform.position.z) + moveDir * moveSpeed * Time.deltaTime;
         Vector3 tentativeWorld = new Vector3(tentativeXZ.x, transform.position.y, tentativeXZ.z);
@@ -262,56 +297,53 @@ public class NPCController : MonoBehaviour
             groundAtTentative = tmpHit.point.y;
         }
 
-        if (!hasGround)
+        if (hasGround)
         {
-            if (debugLogs && !warnedNoGround)
+            // Apply position with ground Y
+            transform.position = new Vector3(tentativeXZ.x, groundAtTentative, tentativeXZ.z);
+
+            // After moving, resolve any penetrations into other colliders
+            if (myCollider != null)
             {
-                Debug.LogWarning(name + " no ground detected ahead at tentative position " + tentativeWorld + ". Choosing new waypoint to avoid falling.");
-                warnedNoGround = true;
-            }
-            ChooseNextWaypoint();
-            return;
-        }
-
-        // Apply position with ground Y
-        transform.position = new Vector3(tentativeXZ.x, groundAtTentative, tentativeXZ.z);
-
-        // After moving, resolve any penetrations into other colliders
-        if (myCollider != null)
-        {
-            // Use a conservative overlap radius based on collider bounds
-            float overlapRadius = myCollider.bounds.extents.magnitude;
-            Collider[] overlaps = Physics.OverlapSphere(transform.position, overlapRadius, ~0, QueryTriggerInteraction.Ignore);
-            foreach (var other in overlaps)
-            {
-                if (other == myCollider) continue;
-
-                Vector3 direction;
-                float penetrationDistance;
-                // Compute minimal translation to separate this collider and the other
-                if (Physics.ComputePenetration(myCollider, transform.position, transform.rotation,
-                                               other, other.transform.position, other.transform.rotation,
-                                               out direction, out penetrationDistance))
+                // Use a conservative overlap radius based on collider bounds
+                float overlapRadius = myCollider.bounds.extents.magnitude;
+                Collider[] overlaps = Physics.OverlapSphere(transform.position, overlapRadius, ~0, QueryTriggerInteraction.Ignore);
+                foreach (var other in overlaps)
                 {
-                    // Move out along the separation direction
-                    transform.position += direction * penetrationDistance;
+                    if (other == myCollider) continue;
 
-                    // Resample ground after correction and clamp to it
-                    float newGroundY = SampleGroundHeight(transform.position);
-                    transform.position = new Vector3(transform.position.x, newGroundY, transform.position.z);
+                    Vector3 direction;
+                    float penetrationDistance;
+                    // Compute minimal translation to separate this collider and the other
+                    if (Physics.ComputePenetration(myCollider, transform.position, transform.rotation,
+                                                   other, other.transform.position, other.transform.rotation,
+                                                   out direction, out penetrationDistance))
+                    {
+                        // Move out along the separation direction
+                        transform.position += direction * penetrationDistance;
+
+                        // Resample ground after correction and clamp to it
+                        float newGroundY = SampleGroundHeight(transform.position);
+                        transform.position = new Vector3(transform.position.x, newGroundY, transform.position.z);
+                    }
                 }
             }
+
+            if (moveDir != Vector3.zero)
+            {
+                Quaternion targetRotation = Quaternion.LookRotation(new Vector3(moveDir.x, 0f, moveDir.z));
+
+                transform.rotation =
+                    Quaternion.Slerp(
+                        transform.rotation,
+                        targetRotation,
+                        rotationSpeed * Time.deltaTime);
+            }
         }
-
-        if (moveDir != Vector3.zero)
+        else
         {
-            Quaternion targetRotation = Quaternion.LookRotation(new Vector3(moveDir.x, 0f, moveDir.z));
-
-            transform.rotation =
-                Quaternion.Slerp(
-                    transform.rotation,
-                    targetRotation,
-                    rotationSpeed * Time.deltaTime);
+            // No ground ahead: don't move forward. Try to pick another waypoint to avoid falling
+            ChooseNextWaypoint();
         }
 
         float distance = Vector3.Distance(new Vector3(transform.position.x, 0f, transform.position.z), new Vector3(targetPos.x, 0f, targetPos.z));
@@ -324,63 +356,59 @@ public class NPCController : MonoBehaviour
 
         if (animator != null)
         {
-            // compute approximate forward speed (actual displacement per second)
-            float animSpeed = moveDir.magnitude * moveSpeed;
-            if (AnimatorHasParameter("Speed"))
-                animator.SetFloat("Speed", animSpeed);
-            else if (debugLogs && !warnedAnimatorParam)
-            {
-                Debug.LogWarning(name + " Animator does not have 'Speed' parameter.");
-                warnedAnimatorParam = true;
-            }
+            // Pass actual speed to animator (magnitude of velocity-ish)
+            animator.SetFloat("Speed", moveSpeed);
         }
-    }
-
-    // Utility to check if the Animator has a parameter with the given name.
-    bool AnimatorHasParameter(string name)
-    {
-        if (animator == null) return false;
-        foreach (var p in animator.parameters)
-            if (p.name == name) return true;
-        return false;
     }
 
     void ChooseNextWaypoint()
     {
-        if (currentWaypoint == null)
-        {
-            if (debugLogs && !warnedNoWaypoint) Debug.LogWarning(name + " currentWaypoint is null in ChooseNextWaypoint");
-            warnedNoWaypoint = true;
-            return;
-        }
-
         List<Waypoint> options =
             new List<Waypoint>(currentWaypoint.connectedWaypoints);
 
+        // Filter to only active waypoints
+        List<Waypoint> activeOptions = options.FindAll(w => w != null && w.IsActive());
+
+        // Remove previous from active options if present
+        if (previousWaypoint != null)
+        {
+            activeOptions.Remove(previousWaypoint);
+        }
+
         // Allow a random chance to go back to the previous waypoint
-        if (previousWaypoint != null && Random.value < reverseChance)
+        if (previousWaypoint != null && Random.value < reverseChance && previousWaypoint.IsActive())
         {
             targetWaypoint = previousWaypoint;
             previousWaypoint = currentWaypoint;
             return;
         }
 
-        if (previousWaypoint != null)
+        // If no active options, fall back to any connected waypoint (including inactive)
+        if (activeOptions.Count == 0)
         {
-            options.Remove(previousWaypoint);
-        }
+            options = new List<Waypoint>(currentWaypoint.connectedWaypoints);
 
-        if (options.Count == 0)
-        {
-            options = new List<Waypoint>(
-                currentWaypoint.connectedWaypoints);
+            if (previousWaypoint != null)
+            {
+                options.Remove(previousWaypoint);
+            }
+
+            if (options.Count == 0)
+            {
+                options = new List<Waypoint>(
+                    currentWaypoint.connectedWaypoints);
+            }
+
+            previousWaypoint = currentWaypoint;
+
+            targetWaypoint =
+                options[Random.Range(0, options.Count)];
+            return;
         }
 
         previousWaypoint = currentWaypoint;
 
         targetWaypoint =
-            options[Random.Range(0, options.Count)];
-
-        if (debugLogs) Debug.Log(name + " chose next waypoint: " + targetWaypoint.name);
+            activeOptions[Random.Range(0, activeOptions.Count)];
     }
 }

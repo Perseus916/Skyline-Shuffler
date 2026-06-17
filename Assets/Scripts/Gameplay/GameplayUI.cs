@@ -34,6 +34,12 @@ public class GameplayUI : MonoBehaviour
     [SerializeField] private Button hintButton;
     [SerializeField] private Button unlockButton;  // Unlocks one locked block
     
+    [Header("Pause Panel")]
+    [SerializeField] private GameObject pausePanel;
+    [SerializeField] private Button resumeButton;
+    [SerializeField] private Button pauseHomeButton;
+    [SerializeField] private Button pauseRestartButton;
+    
     [Header("Undo/Hint Labels")]
     [SerializeField] private Text undoCountText;
     [SerializeField] private Text hintCountText;
@@ -69,6 +75,9 @@ public class GameplayUI : MonoBehaviour
         undoButton?.onClick.RemoveAllListeners();
         hintButton?.onClick.RemoveAllListeners();
         unlockButton?.onClick.RemoveAllListeners();
+        resumeButton?.onClick.RemoveAllListeners();
+        pauseHomeButton?.onClick.RemoveAllListeners();
+        pauseRestartButton?.onClick.RemoveAllListeners();
         
         pauseButton?.onClick.AddListener(OnPauseClicked);
         homeButton?.onClick.AddListener(OnHomeClicked);
@@ -76,6 +85,14 @@ public class GameplayUI : MonoBehaviour
         undoButton?.onClick.AddListener(OnUndoClicked);
         hintButton?.onClick.AddListener(OnHintClicked);
         unlockButton?.onClick.AddListener(OnUnlockClicked);
+        resumeButton?.onClick.AddListener(OnResumeClicked);
+        pauseHomeButton?.onClick.AddListener(OnHomeClicked);
+        pauseRestartButton?.onClick.AddListener(OnRestartClicked);
+        
+        // Hide pause panel and reset timescale when enabling/loading level
+        if (pausePanel != null)
+            pausePanel.SetActive(false);
+        Time.timeScale = 1f;
         
         // Show level number
         if (levelNumberText != null && GameManager.Instance != null)
@@ -99,6 +116,9 @@ public class GameplayUI : MonoBehaviour
     
     private void OnDisable()
     {
+        // Safe reset of timescale when leaving gameplay or UI disabled
+        Time.timeScale = 1f;
+        
         if (gameplayManager != null)
         {
             gameplayManager.OnMoveCountChanged.RemoveListener(UpdateMoveCounter);
@@ -263,18 +283,28 @@ public class GameplayUI : MonoBehaviour
     
     private void OnPauseClicked()
     {
-        if (GameManager.Instance != null)
-            GameManager.Instance.ShowHomeScreen();
+        if (pausePanel != null)
+            pausePanel.SetActive(true);
+        Time.timeScale = 0f;
+    }
+    
+    private void OnResumeClicked()
+    {
+        if (pausePanel != null)
+            pausePanel.SetActive(false);
+        Time.timeScale = 1f;
     }
     
     private void OnHomeClicked()
     {
+        Time.timeScale = 1f;
         if (GameManager.Instance != null)
             GameManager.Instance.ShowHomeScreen();
     }
 
     private void OnRestartClicked()
     {
+        Time.timeScale = 1f;
         if (GameManager.Instance != null)
             GameManager.Instance.ReplayLevel();
     }

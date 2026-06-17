@@ -21,8 +21,24 @@ public class SettingsUI : MonoBehaviour
     
     private void OnEnable()
     {
+        ShowSettingsMenu();
         SetupListeners();
         LoadValues();
+    }
+
+    public void ShowSettingsMenu()
+    {
+        if (progressPanel != null)
+            progressPanel.SetActive(false);
+
+        for (int i = 0; i < transform.childCount; i++)
+        {
+            GameObject child = transform.GetChild(i).gameObject;
+            if (child != progressPanel && child.name != "Reset panel")
+            {
+                child.SetActive(true);
+            }
+        }
     }
     
     private void SetupListeners()
@@ -70,7 +86,13 @@ public class SettingsUI : MonoBehaviour
         if (progressPanel != null)
             progressPanel.SetActive(true);
 
-        if (panel != null)
-            panel.SetActive(false);
+        for (int i = 0; i < transform.childCount; i++)
+        {
+            GameObject child = transform.GetChild(i).gameObject;
+            if (child != progressPanel && child.name != "Reset panel")
+            {
+                child.SetActive(false);
+            }
+        }
     }
 }

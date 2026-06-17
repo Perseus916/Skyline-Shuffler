@@ -72,6 +72,13 @@ public class CameraSwipeRotateController : MonoBehaviour
         // Block all input during celebration
         if (CelebrationMode) return;
 
+        // Block if game is paused
+        if (Time.timeScale == 0f)
+        {
+            swipeStartedOnUI = true;
+            return;
+        }
+
         // Block if touching UI
         swipeStartedOnUI = IsPointerOverUI();
         if (swipeStartedOnUI) return;

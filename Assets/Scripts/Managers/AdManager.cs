@@ -55,11 +55,11 @@ public class AdManager : MonoBehaviour
     
     private void InitializeAds()
     {
-#if UNITY_EDITOR
-        // In editor, we stub everything
+#if !USE_IRONSOURCE || UNITY_EDITOR || (!UNITY_ANDROID && !UNITY_IOS)
+        // In editor/standalone/stub mode, we stub everything
         isInitialized = true;
         isRewardedAdLoaded = true;
-        Debug.Log("<color=yellow>[AdManager] Running in STUB mode (Editor)</color>");
+        Debug.Log("<color=yellow>[AdManager] Running in STUB mode (Editor/Standalone/Stub)</color>");
 #else
         // LevelPlay / ironSource initialization
         IronSourceEvents.onSdkInitializationCompletedEvent += OnSdkInitialized;
@@ -79,7 +79,7 @@ public class AdManager : MonoBehaviour
 #endif
     }
     
-#if !UNITY_EDITOR
+#if USE_IRONSOURCE && !UNITY_EDITOR && (UNITY_ANDROID || UNITY_IOS)
     private void OnSdkInitialized()
     {
         isInitialized = true;
@@ -152,8 +152,8 @@ public class AdManager : MonoBehaviour
         if (!isInitialized) return false;
         if (Time.time - lastAdShownTime < adCooldownSeconds) return false;
         
-#if UNITY_EDITOR
-        return true; // Always available in editor
+#if !USE_IRONSOURCE || UNITY_EDITOR || (!UNITY_ANDROID && !UNITY_IOS)
+        return true; // Always available in editor/standalone/stub mode
 #else
         return IronSource.Agent.isRewardedVideoAvailable();
 #endif
@@ -176,7 +176,7 @@ public class AdManager : MonoBehaviour
         pendingRewardCallback = onRewardGranted;
         pendingPlacement = placement;
         
-#if UNITY_EDITOR
+#if !USE_IRONSOURCE || UNITY_EDITOR || (!UNITY_ANDROID && !UNITY_IOS)
         // Stub: simulate ad with delay
         Debug.Log($"<color=green>[AdManager] STUB — Showing ad for '{placement}'. Granting reward in 1s...</color>");
         Invoke(nameof(StubGrantReward), 1f);
@@ -185,7 +185,7 @@ public class AdManager : MonoBehaviour
 #endif
     }
     
-#if UNITY_EDITOR
+#if !USE_IRONSOURCE || UNITY_EDITOR || (!UNITY_ANDROID && !UNITY_IOS)
     private void StubGrantReward()
     {
         TotalAdsWatched++;
