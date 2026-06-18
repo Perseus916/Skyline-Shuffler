@@ -21,8 +21,7 @@ public class GameplayUI : MonoBehaviour
     [SerializeField] private bool showRemainingMoves = true;
     
     [Header("Progress Bar")]
-    public RectTransform fill;
-    public float maxWidth = 320f;
+    [SerializeField] private Slider progressSlider;
     [Tooltip("If true, the bar drains from full to empty as moves are used. If false, it fills from empty to full.")]
     [SerializeField] private bool drainProgressBar = true;
     
@@ -145,7 +144,7 @@ public class GameplayUI : MonoBehaviour
                 moveCountText.color = Color.white;
         }
         
-        if (fill != null)
+        if (progressSlider != null)
         {
             float percent = limit > 0 ? (float)current / limit : 0f;
             if (drainProgressBar)
@@ -158,9 +157,9 @@ public class GameplayUI : MonoBehaviour
     
     public void SetProgress(float percent)
     {
-        if (fill != null)
+        if (progressSlider != null)
         {
-            fill.sizeDelta = new Vector2(maxWidth * percent, 12f);
+            progressSlider.value = percent;
         }
     }
     

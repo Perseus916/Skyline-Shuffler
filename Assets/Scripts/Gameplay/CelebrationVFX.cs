@@ -8,6 +8,42 @@ using System.Collections.Generic;
 /// </summary>
 public class CelebrationVFX : MonoBehaviour
 {
+    private static Material _sparkleMaterial;
+    public static Material SparkleMaterial
+    {
+        get
+        {
+            if (_sparkleMaterial == null)
+            {
+                Shader s = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+                if (s == null) s = Shader.Find("Particles/Standard Unlit");
+                if (s == null) s = Shader.Find("Sprites/Default");
+                _sparkleMaterial = new Material(s);
+                _sparkleMaterial.color = Color.white;
+            }
+            return _sparkleMaterial;
+        }
+        set { _sparkleMaterial = value; }
+    }
+
+    private static Material _starburstMaterial;
+    public static Material StarburstMaterial
+    {
+        get
+        {
+            if (_starburstMaterial == null)
+            {
+                Shader s = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+                if (s == null) s = Shader.Find("Particles/Standard Unlit");
+                if (s == null) s = Shader.Find("Sprites/Default");
+                _starburstMaterial = new Material(s);
+                _starburstMaterial.color = Color.white;
+            }
+            return _starburstMaterial;
+        }
+        set { _starburstMaterial = value; }
+    }
+
     /// <summary>
     /// Spawn golden sparkle particles rising from a world position.
     /// Great for placing above completed building stacks.
@@ -86,10 +122,14 @@ public class CelebrationVFX : MonoBehaviour
         if (renderer != null)
         {
             renderer.renderMode = ParticleSystemRenderMode.Billboard;
-            var mat = new Material(Shader.Find("Particles/Standard Unlit"));
-            mat.SetFloat("_Mode", 1); // Additive for glow
-            mat.color = Color.white;
-            renderer.material = mat;
+            if (SparkleMaterial == _sparkleMaterial)
+            {
+                if (_sparkleMaterial.shader.name.Contains("Particles/Standard"))
+                {
+                    _sparkleMaterial.SetFloat("_Mode", 1); // Additive for glow
+                }
+            }
+            renderer.material = SparkleMaterial;
         }
 
         ps.Play();
@@ -168,9 +208,7 @@ public class CelebrationVFX : MonoBehaviour
         if (renderer != null)
         {
             renderer.renderMode = ParticleSystemRenderMode.Billboard;
-            var mat = new Material(Shader.Find("Particles/Standard Unlit"));
-            mat.color = Color.white;
-            renderer.material = mat;
+            renderer.material = StarburstMaterial;
         }
 
         ps.Play();
