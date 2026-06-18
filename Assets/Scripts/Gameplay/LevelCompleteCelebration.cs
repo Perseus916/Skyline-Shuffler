@@ -46,6 +46,14 @@ public class LevelCompleteCelebration : MonoBehaviour
     [Tooltip("Delay between building bounces (staggered animation)")]
     [SerializeField] private float bounceCascadeDelay = 0.15f;
 
+    [Header("Celebration Materials")]
+    [Tooltip("Material to use for sparkle particles. If left blank, it will attempt to find a default particle shader.")]
+    [SerializeField] private Material sparkleMaterial;
+    [Tooltip("Material to use for starburst particles. If left blank, it will attempt to find a default particle shader.")]
+    [SerializeField] private Material starburstMaterial;
+    [Tooltip("Material to use for confetti particles. If left blank, it will attempt to find a default particle shader.")]
+    [SerializeField] private Material confettiMaterial;
+
     // Internal state
     private bool isCelebrating;
     private float originalOrthoSize;
@@ -58,6 +66,13 @@ public class LevelCompleteCelebration : MonoBehaviour
     private int cachedStars;
     private int cachedCoinsEarned;
     private LevelCompleteUI cachedLevelCompleteUI;
+
+    private void Awake()
+    {
+        if (sparkleMaterial != null) CelebrationVFX.SparkleMaterial = sparkleMaterial;
+        if (starburstMaterial != null) CelebrationVFX.StarburstMaterial = starburstMaterial;
+        if (confettiMaterial != null) ConfettiController.ConfettiMaterial = confettiMaterial;
+    }
 
     /// <summary>
     /// Start the celebration sequence. Called by GameManager instead of showing popup directly.

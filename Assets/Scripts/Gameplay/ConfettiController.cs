@@ -7,6 +7,24 @@ using UnityEngine;
 /// </summary>
 public class ConfettiController : MonoBehaviour
 {
+    private static Material _confettiMaterial;
+    public static Material ConfettiMaterial
+    {
+        get
+        {
+            if (_confettiMaterial == null)
+            {
+                Shader s = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+                if (s == null) s = Shader.Find("Particles/Standard Unlit");
+                if (s == null) s = Shader.Find("Sprites/Default");
+                _confettiMaterial = new Material(s);
+                _confettiMaterial.color = Color.white;
+            }
+            return _confettiMaterial;
+        }
+        set { _confettiMaterial = value; }
+    }
+
     [Header("Burst Settings")]
     [SerializeField] private int burstCount = 250;
     [SerializeField] private float lifetime = 4f;
@@ -128,10 +146,14 @@ public class ConfettiController : MonoBehaviour
         if (renderer != null)
         {
             renderer.renderMode = ParticleSystemRenderMode.Billboard;
-            // Use the built-in default particle shader
-            renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
-            renderer.material.SetFloat("_Mode", 0); // Additive-ish
-            renderer.material.color = Color.white;
+            if (ConfettiMaterial == _confettiMaterial)
+            {
+                if (_confettiMaterial.shader.name.Contains("Particles/Standard"))
+                {
+                    _confettiMaterial.SetFloat("_Mode", 0); // Additive-ish
+                }
+            }
+            renderer.material = ConfettiMaterial;
         }
     }
 
