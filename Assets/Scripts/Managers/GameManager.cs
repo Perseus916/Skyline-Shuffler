@@ -721,11 +721,8 @@ public class GameManager : MonoBehaviour
         if (isNewThreeStar) coinsEarned += 20; // First 3-star bonus
         SaveSystem.AddCoins(coinsEarned);
         
-        // Replenish 1 free undo on level complete, up to a maximum of 5
-        if (SaveSystem.GetFreeUndos() < 5)
-        {
-            SaveSystem.AddFreeUndos(1);
-        }
+        // IMPORTANT: hints/undos are shop-only. No replenishment on level complete.
+
         
         // Show level complete UI if not the last level
         bool isLastLevel = (levelNumber >= totalLevelsAvailable) || (LoadLevelData(levelNumber + 1) == null);

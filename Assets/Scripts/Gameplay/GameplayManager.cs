@@ -148,22 +148,17 @@ public class GameplayManager : MonoBehaviour
         undoStack.Clear();
         solutionSteps = levelData.solvingSteps != null ? new List<MoveStep>(levelData.solvingSteps) : new();
         nextHintIndex = 0;
-        
+
         // Build grid-to-stack mapping for hints
         BuildGridToStackMap();
-        
-        // Dynamically set free undos and hints based on level wise pattern (2, 3, 1 repeating)
-        int dynamicCount = 1;
-        int pattern = levelNumber % 3;
-        if (pattern == 1) dynamicCount = 2;
-        else if (pattern == 2) dynamicCount = 3;
-        
-        SaveSystem.SetFreeUndos(dynamicCount);
-        SaveSystem.SetFreeHints(dynamicCount);
-        
+
+        // IMPORTANT: do NOT dynamically modify hints/undos here.
+        // Hints/undos are only granted by the Shop (and the initial save values).
+
         OnMoveCountChanged?.Invoke(moveCount, moveLimit);
         OnUndoCountChanged?.Invoke(SaveSystem.GetFreeUndos());
         OnHintCountChanged?.Invoke(SaveSystem.GetFreeHints());
+
         OnCoinsChanged?.Invoke(SaveSystem.GetCoins());
         OnLockedBlockCountChanged?.Invoke(levelLoader != null ? levelLoader.GetLockedSlotCount() : 0);
         
@@ -210,12 +205,16 @@ public class GameplayManager : MonoBehaviour
         undoStack.Clear();
         solutionSteps = levelData.solvingSteps != null ? new List<MoveStep>(levelData.solvingSteps) : new();
         nextHintIndex = 0;
-        
+
         // Build grid-to-stack mapping for hints
         BuildGridToStackMap();
-        
+
+        // IMPORTANT: do NOT dynamically modify hints/undos here.
+        // Hints/undos are only granted by the Shop (and the initial save values).
+
         // Rearrange floors to match saved state
         RearrangeStacksFromState(savedState);
+
         
         // Ensure any completed buildings after restore have their lights and completion visuals set instantly
         foreach (var stack in allStacks)
@@ -282,17 +281,10 @@ public class GameplayManager : MonoBehaviour
     {
         if (levelComplete || isAnimating || Time.timeScale == 0f) return;
         
-        // Check for 'H' key to toggle unlimited hints
-        var keyboard = Keyboard.current;
-        if (keyboard != null && keyboard.hKey.wasPressedThisFrame)
-        {
-            unlimitedHintsEnabled = true;
-            Debug.Log("<color=yellow>H pressed: unlimited hints enabled and showing hint.</color>");
-            if (!TryShowHint())
-            {
-                Debug.LogWarning("<color=red>H pressed but no hint could be shown.</color>");
-            }
-        }
+        // Hints/undos are shop-only. (Debug unlimited hints removed)
+        // Intentionally no keyboard handling here.
+
+
         
         // Get current pointer (works for mouse and touch)
         var pointer = Pointer.current;
@@ -769,8 +761,9 @@ public class GameplayManager : MonoBehaviour
         }
         
         const int UNLOCK_COIN_COST = 200;
-        
+
         bool spent = SaveSystem.SpendCoins(UNLOCK_COIN_COST);
+
         if (!spent)
         {
             // Try rewarded ad

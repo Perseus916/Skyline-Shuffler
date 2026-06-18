@@ -41,9 +41,17 @@ public class LevelMapManager : MonoBehaviour
     [Tooltip("X position for phase 3 (right column), relative to map center.")]
     [SerializeField] private float rightX = 240f;
 
+    [Header("Candy Crush Path")]
+    [Tooltip("Horizontal sweep amplitude (how far left/right the road/nodes travel).")]
+    [SerializeField] private float horizontalAmplitude = 250f;
+
+    [Tooltip("Horizontal sweep frequency for the S-curve (higher = more wiggles).")]
+    [SerializeField] private float horizontalFrequency = 0.25f;
+
     [Header("Spacing (Y)")]
     [Tooltip("Y distance between each level button along the winding path.")]
-    [SerializeField] private float verticalSpacing = 160f;
+    [SerializeField] private float verticalSpacing = 110f;
+
 
     [Tooltip("Starting Y position for levelIndex = 0 (Level 1). Final Y is: startY - (levelIndex * verticalSpacing).")]
     [SerializeField] private float startY = 0f;
@@ -113,8 +121,10 @@ public class LevelMapManager : MonoBehaviour
 
 
             // Smooth winding route (sine wave) instead of fixed columns.
-            // Keep sine-wave winding for X.
-            float x = Mathf.Sin(levelIndex * 0.55f) * 180f;
+            // Candy Crush-like wider sweeping horizontal motion.
+            // phase is based on levelIndex so the curve is continuous.
+            float x = Mathf.Sin(levelIndex * horizontalFrequency) * horizontalAmplitude;
+
 
             // Candy-Crush ordering requirement:
             // Level 1 at bottom, level increases upward.
