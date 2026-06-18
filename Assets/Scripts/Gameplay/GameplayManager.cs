@@ -527,26 +527,23 @@ public class GameplayManager : MonoBehaviour
                 // Stop hook following during transit
                 hookController.StopFollow();
 
-                // Parent the floor to the hook so it moves horizontally with the crane
+                // Parent the block to the hook so it travels with the crane
                 GameObject floorObj = floorData.floorObject;
                 floorObj.transform.SetParent(hookController.hook);
-                
-                // Position the floor slightly below the hook (compensate for hookOffset y=2)
                 floorObj.transform.localPosition = new Vector3(0f, -hookController.hookOffset.y, 0f);
 
-                // Move hook quickly to the elevated position above target stack
+                // Compute the elevated position directly above the TARGET stack
                 Transform targetTop = FindTopFloorTransformOfStack(to);
                 Vector3 targetBasePos = (targetTop != null ? targetTop.position : to.transform.position);
                 Vector3 targetElevatedPos = targetBasePos + hookController.hookOffset + new Vector3(0f, 8f, 0f);
 
-                // We smoothly move hook to this elevated position over 0.2s (fast horizontal transit!)
-                StartCoroutine(MoveHookToPositionCoroutine(targetElevatedPos, 0.2f, () =>
+                // --- 2-phase crane movement: lift straight up, then travel horizontally ---
+                StartCoroutine(CraneLiftAndTransitCoroutine(targetElevatedPos, () =>
                 {
-                    // Arrived high up above 'to' stack! Now perform the drop.
-                    // First unparent from hook
+                    // Arrived high up above 'to' stack — release the block
                     floorObj.transform.SetParent(null);
 
-                    // Add to target stack (which handles parenting and animates it down over animationDuration)
+                    // Drop block onto target stack with smooth deceleration
                     to.AddFloor(floorObj, floorData.style, animationDuration);
                     if (AudioManager.Instance != null) AudioManager.Instance.PlayFloorPlace();
 
@@ -557,11 +554,10 @@ public class GameplayManager : MonoBehaviour
                     // Auto-save
                     SaveInProgressState();
 
-                    // Smoothly move the hook down to follow the dropped block to its landing spot
+                    // Hook follows the block down using EaseOutCubic (matches block landing)
                     Vector3 finalHookPos = to.GetTopFloorWorldPosition() + hookController.hookOffset;
-                    StartCoroutine(MoveHookToPositionCoroutine(finalHookPos, animationDuration, () =>
+                    StartCoroutine(MoveHookToPositionCoroutine(finalHookPos, animationDuration, HookEasing.EaseOutCubic, () =>
                     {
-                        // Now that the hook is down, clear selection and release animation block
                         DeselectStack(false);
                         isAnimating = false;
                     }));
@@ -877,26 +873,23 @@ public class GameplayManager : MonoBehaviour
                 // Stop hook following during transit
                 hookController.StopFollow();
 
-                // Parent the floor to the hook so it moves horizontally with the crane
+                // Parent the block to the hook so it travels with the crane
                 GameObject floorObj = floorData.floorObject;
                 floorObj.transform.SetParent(hookController.hook);
-                
-                // Position the floor slightly below the hook (compensate for hookOffset y=2)
                 floorObj.transform.localPosition = new Vector3(0f, -hookController.hookOffset.y, 0f);
 
-                // Move hook quickly to the elevated position above target stack (to)
+                // Compute elevated position above target stack (to)
                 Transform targetTop = FindTopFloorTransformOfStack(to);
                 Vector3 targetBasePos = (targetTop != null ? targetTop.position : to.transform.position);
                 Vector3 targetElevatedPos = targetBasePos + hookController.hookOffset + new Vector3(0f, 8f, 0f);
 
-                // We smoothly move hook to this elevated position over 0.2s (fast horizontal transit!)
-                StartCoroutine(MoveHookToPositionCoroutine(targetElevatedPos, 0.2f, () =>
+                // --- 2-phase crane movement: lift straight up, then travel horizontally ---
+                StartCoroutine(CraneLiftAndTransitCoroutine(targetElevatedPos, () =>
                 {
-                    // Arrived high up above 'to' stack! Now perform the drop.
-                    // First unparent from hook
+                    // Arrived above 'to' stack — release the block
                     floorObj.transform.SetParent(null);
 
-                    // Add to target stack (which handles parenting and animates it down over animationDuration)
+                    // Drop block onto target stack
                     to.AddFloor(floorObj, floorData.style, animationDuration);
                     if (AudioManager.Instance != null) AudioManager.Instance.PlayFloorPlace();
 
@@ -908,11 +901,10 @@ public class GameplayManager : MonoBehaviour
                     // Auto-save
                     SaveInProgressState();
 
-                    // Smoothly move the hook down to follow the dropped block to its landing spot
+                    // Hook follows the block down using EaseOutCubic
                     Vector3 finalHookPos = to.GetTopFloorWorldPosition() + hookController.hookOffset;
-                    StartCoroutine(MoveHookToPositionCoroutine(finalHookPos, animationDuration, () =>
+                    StartCoroutine(MoveHookToPositionCoroutine(finalHookPos, animationDuration, HookEasing.EaseOutCubic, () =>
                     {
-                        // Now that the hook is down, clear selection and release animation block
                         DeselectStack(false);
                         isAnimating = false;
                     }));
@@ -1204,7 +1196,18 @@ public class GameplayManager : MonoBehaviour
         return top;
     }
 
-    private System.Collections.IEnumerator MoveHookToPositionCoroutine(Vector3 destination, float duration, System.Action onComplete)
+    // Easing modes for hook movement
+    private enum HookEasing { Smoothstep, EaseOutCubic, EaseInOutCubic }
+
+    /// <summary>
+    /// Move the hook to a world position using the specified easing curve.
+    /// </summary>
+    private System.Collections.IEnumerator MoveHookToPositionCoroutine(
+        Vector3 destination, float duration, System.Action onComplete)
+        => MoveHookToPositionCoroutine(destination, duration, HookEasing.Smoothstep, onComplete);
+
+    private System.Collections.IEnumerator MoveHookToPositionCoroutine(
+        Vector3 destination, float duration, HookEasing easing, System.Action onComplete)
     {
         if (hookController == null || hookController.hook == null)
         {
@@ -1219,13 +1222,76 @@ public class GameplayManager : MonoBehaviour
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
-            float t = Mathf.Clamp01(elapsed / duration);
-            t = t * t * (3f - 2f * t); // Smoothstep
+            float raw = Mathf.Clamp01(elapsed / duration);
+            float t = easing switch
+            {
+                HookEasing.EaseOutCubic   => 1f - Mathf.Pow(1f - raw, 3f),
+                HookEasing.EaseInOutCubic => raw < 0.5f
+                                            ? 4f * raw * raw * raw
+                                            : 1f - Mathf.Pow(-2f * raw + 2f, 3f) / 2f,
+                _                         => raw * raw * (3f - 2f * raw), // Smoothstep default
+            };
             hook.position = Vector3.Lerp(start, destination, t);
             yield return null;
         }
 
         hook.position = destination;
+        onComplete?.Invoke();
+    }
+
+    /// <summary>
+    /// 2-phase crane transit: first lifts straight up to the carry height,
+    /// then glides horizontally to position above the target stack.
+    /// This creates the clean L-shaped crane movement instead of a diagonal arc,
+    /// and makes the corner transition smooth and natural.
+    /// </summary>
+    private System.Collections.IEnumerator CraneLiftAndTransitCoroutine(Vector3 targetElevatedPos, System.Action onComplete)
+    {
+        if (hookController == null || hookController.hook == null)
+        {
+            onComplete?.Invoke();
+            yield break;
+        }
+
+        Transform hook = hookController.hook;
+        Vector3 currentPos = hook.position;
+
+        // Phase 1 — Lift straight up to the carry height (EaseOutCubic: fast lift, smooth top)
+        Vector3 liftTarget = new Vector3(currentPos.x, targetElevatedPos.y, currentPos.z);
+        float liftDist    = Mathf.Abs(targetElevatedPos.y - currentPos.y);
+        float liftDur     = Mathf.Clamp(liftDist * 0.022f, 0.10f, 0.20f);
+
+        float elapsed = 0f;
+        Vector3 liftStart = hook.position;
+        while (elapsed < liftDur)
+        {
+            elapsed += Time.deltaTime;
+            float raw = Mathf.Clamp01(elapsed / liftDur);
+            float t   = 1f - Mathf.Pow(1f - raw, 3f); // EaseOutCubic
+            hook.position = Vector3.Lerp(liftStart, liftTarget, t);
+            yield return null;
+        }
+        hook.position = liftTarget;
+
+        // Phase 2 — Horizontal glide to above the target (EaseInOutCubic: smooth departure and arrival)
+        float travelDist = Vector3.Distance(hook.position, targetElevatedPos);
+        float travelDur  = Mathf.Clamp(travelDist * 0.018f, 0.12f, 0.30f);
+
+        elapsed = 0f;
+        Vector3 travelStart = hook.position;
+        while (elapsed < travelDur)
+        {
+            elapsed += Time.deltaTime;
+            float raw = Mathf.Clamp01(elapsed / travelDur);
+            // EaseInOutCubic for buttery smooth entry and exit at corners
+            float t = raw < 0.5f
+                      ? 4f * raw * raw * raw
+                      : 1f - Mathf.Pow(-2f * raw + 2f, 3f) / 2f;
+            hook.position = Vector3.Lerp(travelStart, targetElevatedPos, t);
+            yield return null;
+        }
+        hook.position = targetElevatedPos;
+
         onComplete?.Invoke();
     }
 

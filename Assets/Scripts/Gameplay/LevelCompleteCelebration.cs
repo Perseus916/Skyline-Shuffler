@@ -88,7 +88,12 @@ public class LevelCompleteCelebration : MonoBehaviour
                                   int coinsEarned, LevelCompleteUI levelCompleteUI,
                                   List<BuildingStack> buildingStacks = null)
     {
-        if (isCelebrating) return;
+        Debug.Log($"[LevelCompleteCelebration] PlayCelebration called. Level: {levelNumber}, UI: {(levelCompleteUI != null ? "Assigned" : "Null")}");
+        if (isCelebrating) 
+        {
+            Debug.LogWarning("[LevelCompleteCelebration] Already celebrating. Ignoring call.");
+            return;
+        }
 
         // Cache for later popup
         cachedLevelNumber = levelNumber;
@@ -176,6 +181,7 @@ public class LevelCompleteCelebration : MonoBehaviour
         // Show the Level Complete popup
         if (cachedLevelCompleteUI != null)
         {
+            Debug.Log("[LevelCompleteCelebration] Showing LevelCompleteUI via cached reference...");
             cachedLevelCompleteUI.Show(
                 cachedLevelNumber,
                 cachedMovesTaken,
@@ -183,6 +189,10 @@ public class LevelCompleteCelebration : MonoBehaviour
                 cachedStars,
                 cachedCoinsEarned
             );
+        }
+        else
+        {
+            Debug.LogError("[LevelCompleteCelebration] ERROR: cachedLevelCompleteUI is NULL! The popup will not open. Check if GameManager has LevelCompleteUI assigned in inspector.");
         }
 
         // Re-enable camera swipe

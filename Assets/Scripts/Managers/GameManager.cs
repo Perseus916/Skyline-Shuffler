@@ -725,6 +725,7 @@ public class GameManager : MonoBehaviour
         
         // Show level complete UI if not the last level
         bool isLastLevel = (levelNumber >= totalLevelsAvailable) || (LoadLevelData(levelNumber + 1) == null);
+        Debug.Log($"[GameManager] OnLevelComplete called. levelNumber: {levelNumber}, isLastLevel: {isLastLevel}, celebration: {(celebration != null ? "Assigned" : "Null")}, levelCompleteUI: {(levelCompleteUI != null ? "Assigned" : "Null")}");
         if (isLastLevel)
         {
             Debug.Log("<color=green>Last level complete! Returning to level select.</color>");
@@ -736,6 +737,7 @@ public class GameManager : MonoBehaviour
             // Try celebration sequence first, fallback to direct popup
             if (celebration != null)
             {
+                Debug.Log("[GameManager] Triggering Celebration Sequence...");
                 // Get building stacks from GameplayManager for VFX positioning
                 var buildingStacks = GameplayManager.Instance != null 
                     ? GameplayManager.Instance.GetAllStacks() 
@@ -748,7 +750,12 @@ public class GameManager : MonoBehaviour
             }
             else if (levelCompleteUI != null)
             {
+                Debug.Log("[GameManager] No celebration component found. Showing LevelCompleteUI directly.");
                 levelCompleteUI.Show(levelNumber, movesTaken, optimalMoves, stars, coinsEarned);
+            }
+            else
+            {
+                Debug.LogError("[GameManager] ERROR: Both 'celebration' and 'levelCompleteUI' references are NULL in the GameManager inspector! Cannot show popup.");
             }
         }
         
