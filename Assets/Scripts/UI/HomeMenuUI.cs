@@ -24,6 +24,7 @@ public class HomeMenuUI : MonoBehaviour
     [Header("Display")]
     [SerializeField] private TextMeshProUGUI playButtonText;
     [SerializeField] private TextMeshProUGUI totalStarsText;
+    [SerializeField] private TextMeshProUGUI totalCoinsText;
 
     private void OnEnable()
     {
@@ -45,6 +46,15 @@ public class HomeMenuUI : MonoBehaviour
 
         SetupButtons();
         UpdateUI();
+    }
+
+    private void Update()
+    {
+        // Keep coins display updated if it changes (e.g., after closing shop)
+        if (totalCoinsText != null)
+        {
+            totalCoinsText.text = $"{SaveSystem.GetCoins()}";
+        }
     }
 
     private void SetupButtons()
@@ -79,6 +89,12 @@ public class HomeMenuUI : MonoBehaviour
         if (totalStarsText != null)
         {
             totalStarsText.text = $"{SaveSystem.GetTotalStars()}";
+        }
+
+        // Show total coins
+        if (totalCoinsText != null)
+        {
+            totalCoinsText.text = $"{SaveSystem.GetCoins()}";
         }
     }
 
@@ -125,6 +141,11 @@ public class HomeMenuUI : MonoBehaviour
 
     private void OnShopClicked()
     {
+        if (shopButton != null)
+        {
+            StartCoroutine(DisableButtonTemporarily(shopButton, 0.5f));
+        }
+
         if (AudioManager.Instance != null)
             AudioManager.Instance.PlayButtonClick();
 
@@ -144,8 +165,22 @@ public class HomeMenuUI : MonoBehaviour
 
         // Last fallback: delegate to GameManager if it exists.
         if (GameManager.Instance != null)
+        {
             GameManager.Instance.ShowShop();
+        }
     }
+
+    private IEnumerator DisableButtonTemporarily(Button button, float duration)
+    {
+        button.interactable = false;
+        yield return new WaitForSecondsRealtime(duration);
+        button.interactable = true;
+    }
+
+    /// <summary>
+    /// No-op kept for API compatibility.
+    /// </summary>
+    public void RestoreShopButton() { }
 
 
     private IEnumerator LevelsButtonAnimation()

@@ -14,6 +14,7 @@ public class LevelSelectUI : MonoBehaviour
     
     [Header("Display")]
     [SerializeField] private TextMeshProUGUI totalStarsText;
+    [SerializeField] private TextMeshProUGUI totalCoinsText;
     
     private void OnEnable()
     {
@@ -22,6 +23,12 @@ public class LevelSelectUI : MonoBehaviour
         
         PopulateLevelButtons();
         UpdateStarsDisplay();
+        UpdateCoinsDisplay();
+    }
+
+    private void Update()
+    {
+        UpdateCoinsDisplay();
     }
     
     private void PopulateLevelButtons()
@@ -53,6 +60,12 @@ public class LevelSelectUI : MonoBehaviour
     {
         if (totalStarsText != null)
             totalStarsText.text = $"{SaveSystem.GetTotalStars()}";
+    }
+    
+    private void UpdateCoinsDisplay()
+    {
+        if (totalCoinsText != null)
+            totalCoinsText.text = $"{SaveSystem.GetCoins()}";
     }
     
     private void OnBackClicked()

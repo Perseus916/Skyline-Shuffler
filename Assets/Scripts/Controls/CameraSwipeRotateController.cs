@@ -15,6 +15,7 @@ public class CameraSwipeRotateController : MonoBehaviour
     private bool isRotating = false;
     private float targetYRotation = 0f;
     private bool swipeStartedOnUI = false;
+    private bool checkSwipeStarted = false;
 
     /// <summary>
     /// When true, all swipe input is blocked (used during level-complete celebration orbit).
@@ -38,6 +39,15 @@ public class CameraSwipeRotateController : MonoBehaviour
     }
 
     private void OnDisable() => controls.Disable();
+
+    private void Update()
+    {
+        if (checkSwipeStarted)
+        {
+            checkSwipeStarted = false;
+            ProcessSwipeStart();
+        }
+    }
 
     /// <summary>
     /// Sync the internal target rotation after an external rotation (e.g., celebration orbit).
@@ -68,6 +78,11 @@ public class CameraSwipeRotateController : MonoBehaviour
     }
 
     private void OnSwipeStarted(InputAction.CallbackContext context)
+    {
+        checkSwipeStarted = true;
+    }
+
+    private void ProcessSwipeStart()
     {
         // Block all input during celebration
         if (CelebrationMode) return;

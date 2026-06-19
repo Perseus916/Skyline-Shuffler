@@ -7,8 +7,9 @@ public class ShopUI : MonoBehaviour
 
     private void Awake()
     {
-        // Ensure we start hidden if a root/panel is used.
-        if (shopRoot != null)
+        // Ensure we start hidden if a root/panel is used, but only at the very start of the game.
+        // If Awake is called later (e.g., when the panel is first activated), do not hide it.
+        if (Time.frameCount == 0 && shopRoot != null)
             shopRoot.SetActive(false);
     }
 

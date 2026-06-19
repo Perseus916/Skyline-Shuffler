@@ -1,6 +1,7 @@
 using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
+using System.Collections;
 /// <summary>
 /// Shop panel controller + purchase logic for Undo/Hint packs.
 /// Integrates with SaveSystem economy.
@@ -21,6 +22,15 @@ public class ShopManager : MonoBehaviour
     [Header("UI")]
     [Tooltip("TextMeshPro UI element that displays current coin balance.")]
     [SerializeField] private TextMeshProUGUI coinDisplayText;
+
+    [Header("Purchase Notification Panel (achive)")]
+    [Tooltip("The 'achive' panel GameObject.")]
+    [SerializeField] private GameObject achivePanel;
+    [Tooltip("The TextMeshProUGUI inside the 'achive' panel.")]
+    [SerializeField] private TextMeshProUGUI achiveText;
+    [SerializeField] private float notificationDuration = 2.0f;
+
+    private Coroutine notificationCoroutine;
 
     [Header("Buttons (optional runtime wiring)")]
     [Tooltip("If assigned, these are used to wire the OnClick events automatically on enable.")]
@@ -53,8 +63,16 @@ public class ShopManager : MonoBehaviour
     private const int HINT5_AMOUNT = 5;
     private void Awake()
     {
-        if (shopPanel != null)
+        if (Time.frameCount == 0 && shopPanel != null)
             shopPanel.SetActive(false);
+        
+        // Ensure the notification panel starts hidden and scaled to 0
+        if (achivePanel != null)
+        {
+            achivePanel.transform.localScale = Vector3.zero;
+            achivePanel.SetActive(false);
+        }
+
         RefreshCoinDisplay();
     }
     private void OnEnable()
@@ -70,13 +88,17 @@ public class ShopManager : MonoBehaviour
     public void OpenShop()
     {
         if (shopPanel != null)
+        {
             shopPanel.SetActive(true);
+        }
         RefreshCoinDisplay();
     }
     public void CloseShop()
     {
         if (shopPanel != null)
+        {
             shopPanel.SetActive(false);
+        }
     }
     // Optional alternate name if your BACK button expects it.
     public void BackButton()
@@ -114,6 +136,10 @@ public class ShopManager : MonoBehaviour
             SaveSystem.AddFreeHints(amount);
 
         RefreshCoinDisplay();
+
+        // Show purchase success notification!
+        string itemName = isUndo ? (amount == 1 ? "Undo" : "Undos") : (amount == 1 ? "Hint" : "Hints");
+        ShowPurchaseNotification($"Purchased {amount} {itemName}!");
     }
 
     private void RefreshCoinDisplay()
@@ -143,5 +169,106 @@ public class ShopManager : MonoBehaviour
         if (buyHint2Button) buyHint2Button.onClick.RemoveListener(BuyHint2);
         if (buyHint5Button) buyHint5Button.onClick.RemoveListener(BuyHint5);
         if (backButton) backButton.onClick.RemoveListener(BackButton);
+    }
+
+    private void ShowPurchaseNotification(string message)
+    {
+        if (notificationCoroutine != null)
+        {
+            StopCoroutine(notificationCoroutine);
+        }
+        notificationCoroutine = StartCoroutine(AnimateNotification(message));
+    }
+
+    private IEnumerator AnimateNotification(string message)
+    {
+        if (achivePanel == null) yield break;
+
+        // Set the text
+        if (achiveText != null)
+        {
+            achiveText.text = message;
+        }
+
+        // Set active
+        achivePanel.SetActive(true);
+
+        // Animation timing configuration
+        float elapsed = 0f;
+        float popDuration = 0.4f;
+
+        // Easing colors: starts as an attractive vibrant bright gold and fades into clean white
+        Color startColor = new Color(1f, 0.88f, 0.2f, 0f); // Bright Gold, transparent at first
+        Color targetColor = Color.white; // Settle on white
+
+        // Spacing animation configuration
+        float startCharSpacing = 20f;  // widely spaced
+        float targetCharSpacing = 0f;  // normal
+
+        float startWordSpacing = 30f;  // widely spaced
+        float targetWordSpacing = 0f;  // normal
+
+        // 1. Elastic Pop Up + Text Easing In (color, character/word spacing, scale)
+        while (elapsed < popDuration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = elapsed / popDuration;
+            
+            // Back Out Easing curve: overshoots 1.0 slightly (to ~1.15) and bounces back smoothly
+            float c1 = 1.70158f;
+            float c3 = c1 + 1f;
+            float scale = 1f + c3 * Mathf.Pow(t - 1f, 3f) + c1 * Mathf.Pow(t - 1f, 2f);
+            achivePanel.transform.localScale = new Vector3(scale, scale, scale);
+
+            // Animate text elements
+            if (achiveText != null)
+            {
+                achiveText.color = Color.Lerp(startColor, targetColor, t);
+                achiveText.characterSpacing = Mathf.Lerp(startCharSpacing, targetCharSpacing, t);
+                achiveText.wordSpacing = Mathf.Lerp(startWordSpacing, targetWordSpacing, t);
+            }
+            
+            yield return null;
+        }
+
+        // Lock values at final state
+        achivePanel.transform.localScale = Vector3.one;
+        if (achiveText != null)
+        {
+            achiveText.color = targetColor;
+            achiveText.characterSpacing = targetCharSpacing;
+            achiveText.wordSpacing = targetWordSpacing;
+        }
+
+        // 2. Wait for display duration
+        yield return new WaitForSecondsRealtime(notificationDuration);
+
+        // 3. Smooth Scale Down + Text Fade Out & Disperse
+        elapsed = 0f;
+        float shrinkDuration = 0.2f;
+        Color fadeOutColor = new Color(targetColor.r, targetColor.g, targetColor.b, 0f); // fade to transparent
+
+        while (elapsed < shrinkDuration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = elapsed / shrinkDuration;
+            
+            // Ease out quad
+            float scale = 1f - (t * t);
+            achivePanel.transform.localScale = new Vector3(scale, scale, scale);
+
+            // Animate text fading out and dispersing characters slightly
+            if (achiveText != null)
+            {
+                achiveText.color = Color.Lerp(targetColor, fadeOutColor, t);
+                achiveText.characterSpacing = Mathf.Lerp(targetCharSpacing, 12f, t);
+                achiveText.wordSpacing = Mathf.Lerp(targetWordSpacing, 18f, t);
+            }
+            
+            yield return null;
+        }
+
+        achivePanel.transform.localScale = Vector3.zero;
+        achivePanel.SetActive(false);
     }
 }
