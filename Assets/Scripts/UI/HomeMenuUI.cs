@@ -18,6 +18,8 @@ public class HomeMenuUI : MonoBehaviour
 
     [Header("Panels")]
     [SerializeField] private GameObject settingsPanel;
+    [SerializeField] private GameObject shopPanel;
+
 
     [Header("Display")]
     [SerializeField] private TextMeshProUGUI playButtonText;
@@ -126,11 +128,25 @@ public class HomeMenuUI : MonoBehaviour
         if (AudioManager.Instance != null)
             AudioManager.Instance.PlayButtonClick();
 
+        // Preferred path: use ShopManager if assigned.
         if (shopManager != null)
+        {
             shopManager.OpenShop();
-        else if (GameManager.Instance != null)
+            return;
+        }
+
+        // Fallback path: directly show the serialized shop panel.
+        if (shopPanel != null)
+        {
+            shopPanel.SetActive(true);
+            return;
+        }
+
+        // Last fallback: delegate to GameManager if it exists.
+        if (GameManager.Instance != null)
             GameManager.Instance.ShowShop();
     }
+
 
     private IEnumerator LevelsButtonAnimation()
     {

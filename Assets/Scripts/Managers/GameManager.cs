@@ -89,7 +89,9 @@ public class GameManager : MonoBehaviour
         if (keyboard == null)
             return;
 
-        // Existing debug: unlock all levels on N
+        // DEBUG (temporary): unlock all levels on N.
+        // Commented out while we remove unintended free progression.
+        /*
         if (keyboard.nKey.wasPressedThisFrame)
         {
             SaveSystem.UnlockAllLevels(totalLevelsAvailable);
@@ -100,6 +102,8 @@ public class GameManager : MonoBehaviour
                 ShowLevelSelect();
             }
         }
+        */
+
 
         // Testing: press C to add 5000 coins
         if (keyboard.cKey.wasPressedThisFrame)
@@ -717,14 +721,12 @@ public class GameManager : MonoBehaviour
         if (isNewThreeStar) coinsEarned += 20; // First 3-star bonus
         SaveSystem.AddCoins(coinsEarned);
         
-        // Replenish 1 free undo on level complete, up to a maximum of 5
-        if (SaveSystem.GetFreeUndos() < 5)
-        {
-            SaveSystem.AddFreeUndos(1);
-        }
+        // IMPORTANT: hints/undos are shop-only. No replenishment on level complete.
+
         
         // Show level complete UI if not the last level
         bool isLastLevel = (levelNumber >= totalLevelsAvailable) || (LoadLevelData(levelNumber + 1) == null);
+        Debug.Log($"[GameManager] OnLevelComplete called. levelNumber: {levelNumber}, isLastLevel: {isLastLevel}, celebration: {(celebration != null ? "Assigned" : "Null")}, levelCompleteUI: {(levelCompleteUI != null ? "Assigned" : "Null")}");
         if (isLastLevel)
         {
             Debug.Log("<color=green>Last level complete! Returning to level select.</color>");
@@ -736,6 +738,7 @@ public class GameManager : MonoBehaviour
             // Try celebration sequence first, fallback to direct popup
             if (celebration != null)
             {
+                Debug.Log("[GameManager] Triggering Celebration Sequence...");
                 // Get building stacks from GameplayManager for VFX positioning
                 var buildingStacks = GameplayManager.Instance != null 
                     ? GameplayManager.Instance.GetAllStacks() 
@@ -748,7 +751,12 @@ public class GameManager : MonoBehaviour
             }
             else if (levelCompleteUI != null)
             {
+                Debug.Log("[GameManager] No celebration component found. Showing LevelCompleteUI directly.");
                 levelCompleteUI.Show(levelNumber, movesTaken, optimalMoves, stars, coinsEarned);
+            }
+            else
+            {
+                Debug.LogError("[GameManager] ERROR: Both 'celebration' and 'levelCompleteUI' references are NULL in the GameManager inspector! Cannot show popup.");
             }
         }
         

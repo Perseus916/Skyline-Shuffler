@@ -137,9 +137,12 @@ public class ProgressSettingsUI : MonoBehaviour
             // Clear everything
             SaveSystem.ResetAllProgress();
             SaveSystem.Data.coins = 0;
-            SaveSystem.Data.freeUndos = 2;
+            // IMPORTANT: hints/undos are shop-only.
+            // After a full reset, start with the initial values.
+            SaveSystem.Data.freeUndos = 1;
             SaveSystem.Data.freeHints = 1;
             SaveSystem.Save();
+
             Debug.Log("<color=yellow>All data cleared!</color>");
         }
         else

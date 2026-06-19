@@ -28,8 +28,9 @@ public class GameSaveData
     
     // Economy
     public int coins = 0;
-    public int freeUndos = 2;    // Start with 2 free undos (tight = ad demand)
-    public int freeHints = 1;    // Start with 1 free hint
+    public int freeUndos = 1;    // Start with 1 undo on first download/play
+    public int freeHints = 1;    // Start with 1 hint on first download/play
+
     
     // Settings
     public float masterVolume = 1f;
@@ -89,7 +90,12 @@ public static class SaveSystem
                 _cachedData = new GameSaveData();
             }
         }
+
+        // Ensure starting consumables once per fresh install.
+        // This prevents negative/incorrect values if old saves exist.
+        EnsureInitialConsumables();
     }
+
     
     /// <summary>
     /// Save current data to PlayerPrefs
@@ -206,8 +212,21 @@ public static class SaveSystem
     // ========================================
     // COINS
     // ========================================
-    
+
     public static int GetCoins() => Data.coins;
+
+    private static void EnsureInitialConsumables()
+    {
+        // If save is brand new, start with exactly 1 hint + 1 undo.
+        // (Also safe if other systems have accidentally overwritten via old patterns.)
+        if (Data.freeHints == 0 && Data.freeUndos == 0)
+        {
+            Data.freeUndos = 1;
+            Data.freeHints = 1;
+            Save();
+        }
+    }
+
     
     /// <summary>Add coins and save</summary>
     public static void AddCoins(int amount)

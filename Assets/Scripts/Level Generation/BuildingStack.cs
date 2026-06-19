@@ -302,25 +302,42 @@ public class BuildingStack : MonoBehaviour
     private IEnumerator AnimateFloorToPosition(GameObject floor, Vector3 targetLocalPos, float duration)
     {
         Vector3 startPos = floor.transform.localPosition;
-        Vector3 startScale = compensatedScale * 1.18f; // Start 18% larger
         Vector3 targetScale = compensatedScale;
-
         float elapsed = 0f;
 
-        while (elapsed < duration)
+        // Phase timings: 90% of duration = drop, last 10% = squash landing
+        float dropPhase = duration * 0.9f;
+        float squashPhase = duration * 0.1f;
+
+        // --- Phase 1: Block falls into place with EaseOutQuart (fast start, decelerates to solid stop) ---
+        while (elapsed < dropPhase)
         {
             elapsed += Time.deltaTime;
-            float t = Mathf.Clamp01(elapsed / duration);
-
-            // Easing position and scale with organic EaseOutBack (settling spring bounce and squish)
-            float easeT = EaseOutBack(t);
+            float t = Mathf.Clamp01(elapsed / dropPhase);
+            float easeT = EaseOutQuart(t);
             floor.transform.localPosition = Vector3.Lerp(startPos, targetLocalPos, easeT);
-            floor.transform.localScale = Vector3.Lerp(startScale, targetScale, easeT);
-
+            // Keep scale consistent during fall — block is a rigid object, not a ball
+            floor.transform.localScale = targetScale;
             yield return null;
         }
 
         floor.transform.localPosition = targetLocalPos;
+        floor.transform.localScale = targetScale;
+
+        // --- Phase 2: Tiny landing squash (compress Y slightly, expand XZ) for physical weight feel ---
+        float squashElapsed = 0f;
+        Vector3 squashedScale = new Vector3(targetScale.x * 1.06f, targetScale.y * 0.92f, targetScale.z * 1.06f);
+
+        while (squashElapsed < squashPhase)
+        {
+            squashElapsed += Time.deltaTime;
+            float st = Mathf.Clamp01(squashElapsed / squashPhase);
+            // Quick squash peak then immediately restore
+            float squashT = st < 0.4f ? (st / 0.4f) : (1f - (st - 0.4f) / 0.6f);
+            floor.transform.localScale = Vector3.Lerp(targetScale, squashedScale, squashT * 0.85f);
+            yield return null;
+        }
+
         floor.transform.localScale = targetScale;
         currentAnimation = null;
 
@@ -328,11 +345,13 @@ public class BuildingStack : MonoBehaviour
         PlayPlacementSnapFeedback(floor);
     }
 
-    private float EaseOutBack(float x)
+    /// <summary>
+    /// EaseOutQuart: block decelerates strongly into its landing position — fast then slows to a solid stop.
+    /// Feels like a heavy object landing, not a bouncing ball.
+    /// </summary>
+    private float EaseOutQuart(float x)
     {
-        float c1 = 1.70158f;
-        float c3 = c1 + 1f;
-        return 1f + c3 * Mathf.Pow(x - 1f, 3f) + c1 * Mathf.Pow(x - 1f, 2f);
+        return 1f - Mathf.Pow(1f - x, 4f);
     }
 
     private void PlayPlacementSnapFeedback(GameObject floor)

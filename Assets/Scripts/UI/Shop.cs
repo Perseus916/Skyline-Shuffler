@@ -21,7 +21,8 @@ public class ShopManager : MonoBehaviour
     [Header("UI")]
     [Tooltip("TextMeshPro UI element that displays current coin balance.")]
     [SerializeField] private TextMeshProUGUI coinDisplayText;
-    [Header("Optional (runtime wiring)")]
+
+    [Header("Buttons (optional runtime wiring)")]
     [Tooltip("If assigned, these are used to wire the OnClick events automatically on enable.")]
     [SerializeField] private Button buyUndo1Button;
     [SerializeField] private Button buyUndo2Button;
@@ -31,6 +32,11 @@ public class ShopManager : MonoBehaviour
     [SerializeField] private Button buyHint2Button;
     [SerializeField] private Button buyHint5Button;
     [SerializeField] private Button backButton;
+
+    [Header("Shop options")]
+    [Tooltip("If true, undo/hint grants can only happen from shop purchases (not via other systems). Currently enabled by removing other grant logic elsewhere.")]
+    [SerializeField] private bool shopOnlyConsumables = true;
+
     private const int UNDO1_COST = 100;
     private const int UNDO1_AMOUNT = 1;
     private const int UNDO2_COST = 200;
@@ -96,14 +102,20 @@ public class ShopManager : MonoBehaviour
         if (amount <= 0) return;
         int coins = SaveSystem.GetCoins();
         if (coins < coinCost) return;
+
+        // Spend coins atomically.
         bool spent = SaveSystem.SpendCoins(coinCost);
         if (!spent) return;
+
+        // Grant consumables (shop-only policy).
         if (isUndo)
             SaveSystem.AddFreeUndos(amount);
         else
             SaveSystem.AddFreeHints(amount);
+
         RefreshCoinDisplay();
     }
+
     private void RefreshCoinDisplay()
     {
         if (coinDisplayText == null) return;
