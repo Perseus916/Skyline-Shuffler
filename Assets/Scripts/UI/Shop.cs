@@ -47,6 +47,17 @@ public class ShopManager : MonoBehaviour
     [Tooltip("If true, undo/hint grants can only happen from shop purchases (not via other systems). Currently enabled by removing other grant logic elsewhere.")]
     [SerializeField] private bool shopOnlyConsumables = true;
 
+    [Header("Fail Feedback Visuals")]
+    [Tooltip("Optional: image for fullscreen red flash. If left unassigned, a temporary RedFlash image will be created at runtime.")]
+    [SerializeField] private Image redFlashImage;
+    [Tooltip("Optional: RectTransform to shake (e.g. the Shop Panel window). If unassigned, falls back to shopPanel's transform.")]
+    [SerializeField] private RectTransform shakeTarget;
+
+    private Coroutine shakeCoroutine;
+    private Coroutine flashCoroutine;
+    private Vector3 originalShakePos;
+    private bool hasStoredOriginalPos = false;
+
     private const int UNDO1_COST = 100;
     private const int UNDO1_AMOUNT = 1;
     private const int UNDO2_COST = 200;
@@ -83,6 +94,42 @@ public class ShopManager : MonoBehaviour
     private void OnDisable()
     {
         UnwireButtonsIfAssigned();
+
+        // Ensure positions and overlays are reset when panel is closed/disabled
+        if (shakeCoroutine != null)
+        {
+            StopCoroutine(shakeCoroutine);
+            shakeCoroutine = null;
+        }
+        if (hasStoredOriginalPos)
+        {
+            Transform target = shakeTarget != null ? shakeTarget : (shopPanel != null ? shopPanel.transform : transform);
+            if (target != null)
+            {
+                target.localPosition = originalShakePos;
+            }
+            hasStoredOriginalPos = false;
+        }
+
+        if (flashCoroutine != null)
+        {
+            StopCoroutine(flashCoroutine);
+            flashCoroutine = null;
+            
+            Image flashImage = redFlashImage;
+            if (flashImage == null)
+            {
+                Transform existingFlash = transform.Find("RedFlash") ?? (shopPanel != null ? shopPanel.transform.Find("RedFlash") : null);
+                if (existingFlash != null)
+                {
+                    flashImage = existingFlash.GetComponent<Image>();
+                }
+            }
+            if (flashImage != null)
+            {
+                flashImage.color = new Color(1f, 0f, 0f, 0f);
+            }
+        }
     }
     // 1) PANEL NAVIGATION
     public void OpenShop()
@@ -99,10 +146,17 @@ public class ShopManager : MonoBehaviour
         {
             shopPanel.SetActive(false);
         }
+        else
+        {
+            gameObject.SetActive(false);
+        }
     }
     // Optional alternate name if your BACK button expects it.
     public void BackButton()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+            
         CloseShop();
     }
     // 2) PURCHASE LOGIC FOR BUTTONS
@@ -123,11 +177,21 @@ public class ShopManager : MonoBehaviour
     {
         if (amount <= 0) return;
         int coins = SaveSystem.GetCoins();
-        if (coins < coinCost) return;
+        if (coins < coinCost)
+        {
+            TriggerFailFeedback();
+            return;
+        }
 
         // Spend coins atomically.
         bool spent = SaveSystem.SpendCoins(coinCost);
         if (!spent) return;
+
+        // Play coin spend sound & trigger haptics
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayCoinSpend();
+        }
 
         // Grant consumables (shop-only policy).
         if (isUndo)
@@ -270,5 +334,130 @@ public class ShopManager : MonoBehaviour
 
         achivePanel.transform.localScale = Vector3.zero;
         achivePanel.SetActive(false);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // FAIL FEEDBACK (INSUFFICIENT COINS)
+    // ──────────────────────────────────────────────────────────────────────
+
+    private void TriggerFailFeedback()
+    {
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayMoveFailed();
+        }
+
+        if (shakeCoroutine != null)
+        {
+            StopCoroutine(shakeCoroutine);
+            Transform target = shakeTarget != null ? shakeTarget : (shopPanel != null ? shopPanel.transform : transform);
+            if (target != null && hasStoredOriginalPos)
+            {
+                target.localPosition = originalShakePos;
+            }
+        }
+        
+        if (flashCoroutine != null)
+        {
+            StopCoroutine(flashCoroutine);
+        }
+
+        shakeCoroutine = StartCoroutine(ShakeScreenRoutine());
+        flashCoroutine = StartCoroutine(RedFlashRoutine());
+    }
+
+    private IEnumerator ShakeScreenRoutine()
+    {
+        Transform target = shakeTarget != null ? shakeTarget : (shopPanel != null ? shopPanel.transform : transform);
+        if (target == null) yield break;
+
+        if (hasStoredOriginalPos)
+        {
+            target.localPosition = originalShakePos;
+        }
+        else
+        {
+            originalShakePos = target.localPosition;
+            hasStoredOriginalPos = true;
+        }
+
+        float elapsed = 0f;
+        float duration = 0.35f;
+        float magnitude = 12f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float percent = elapsed / duration;
+            float currentMagnitude = Mathf.Lerp(magnitude, 0f, percent);
+
+            float offsetX = Random.Range(-1f, 1f) * currentMagnitude;
+            float offsetY = Random.Range(-1f, 1f) * currentMagnitude;
+
+            target.localPosition = new Vector3(originalShakePos.x + offsetX, originalShakePos.y + offsetY, originalShakePos.z);
+            yield return null;
+        }
+
+        target.localPosition = originalShakePos;
+        hasStoredOriginalPos = false;
+    }
+
+    private IEnumerator RedFlashRoutine()
+    {
+        Image flashImage = redFlashImage;
+        
+        if (flashImage == null)
+        {
+            Transform existingFlash = transform.Find("RedFlash") ?? (shopPanel != null ? shopPanel.transform.Find("RedFlash") : null);
+            if (existingFlash != null)
+            {
+                flashImage = existingFlash.GetComponent<Image>();
+            }
+            
+            if (flashImage == null)
+            {
+                GameObject flashObj = new GameObject("RedFlash", typeof(RectTransform), typeof(Image));
+                flashObj.transform.SetParent(shopPanel != null ? shopPanel.transform : transform, false);
+                
+                RectTransform rect = flashObj.GetComponent<RectTransform>();
+                rect.anchorMin = Vector2.zero;
+                rect.anchorMax = Vector2.one;
+                rect.offsetMin = Vector2.zero;
+                rect.offsetMax = Vector2.zero;
+                
+                flashImage = flashObj.GetComponent<Image>();
+                flashImage.color = new Color(1f, 0f, 0f, 0f);
+                flashImage.raycastTarget = false;
+            }
+        }
+
+        if (flashImage == null) yield break;
+
+        flashImage.gameObject.SetActive(true);
+
+        float elapsed = 0f;
+        float duration = 0.4f;
+        float maxAlpha = 0.35f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float percent = elapsed / duration;
+
+            float alpha;
+            if (percent < 0.25f)
+            {
+                alpha = Mathf.Lerp(0f, maxAlpha, percent / 0.25f);
+            }
+            else
+            {
+                alpha = Mathf.Lerp(maxAlpha, 0f, (percent - 0.25f) / 0.75f);
+            }
+
+            flashImage.color = new Color(1f, 0f, 0f, alpha);
+            yield return null;
+        }
+
+        flashImage.color = new Color(1f, 0f, 0f, 0f);
     }
 }

@@ -38,6 +38,8 @@ public class GameplayUI : MonoBehaviour
     [SerializeField] private Button resumeButton;
     [SerializeField] private Button pauseHomeButton;
     [SerializeField] private Button pauseRestartButton;
+    [SerializeField] private Button pauseSettingsButton;
+    [SerializeField] private GameObject settingsPanel;
     
     [Header("Undo/Hint Labels")]
     [SerializeField] private Text undoCountText;
@@ -77,6 +79,7 @@ public class GameplayUI : MonoBehaviour
         resumeButton?.onClick.RemoveAllListeners();
         pauseHomeButton?.onClick.RemoveAllListeners();
         pauseRestartButton?.onClick.RemoveAllListeners();
+        pauseSettingsButton?.onClick.RemoveAllListeners();
         
         pauseButton?.onClick.AddListener(OnPauseClicked);
         homeButton?.onClick.AddListener(OnHomeClicked);
@@ -87,6 +90,7 @@ public class GameplayUI : MonoBehaviour
         resumeButton?.onClick.AddListener(OnResumeClicked);
         pauseHomeButton?.onClick.AddListener(OnHomeClicked);
         pauseRestartButton?.onClick.AddListener(OnRestartClicked);
+        pauseSettingsButton?.onClick.AddListener(OnSettingsClicked);
         
         // Hide pause panel and reset timescale when enabling/loading level
         if (pausePanel != null)
@@ -324,5 +328,20 @@ public class GameplayUI : MonoBehaviour
     {
         if (gameplayManager != null)
             gameplayManager.TryUnlockBlock();
+    }
+
+    private void OnSettingsClicked()
+    {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+
+        if (settingsPanel != null)
+        {
+            settingsPanel.SetActive(true);
+        }
+        else if (GameManager.Instance != null)
+        {
+            GameManager.Instance.ShowSettings();
+        }
     }
 }

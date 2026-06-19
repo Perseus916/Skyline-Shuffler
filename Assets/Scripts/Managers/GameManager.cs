@@ -780,18 +780,45 @@ public class GameManager : MonoBehaviour
     public float MusicVolume
     {
         get => SaveSystem.Data.musicVolume;
-        set { SaveSystem.Data.musicVolume = value; SaveSystem.Save(); }
+        set
+        {
+            if (AudioManager.Instance != null)
+                AudioManager.Instance.SetMusicVolume(value);
+            else
+            {
+                SaveSystem.Data.musicVolume = value;
+                SaveSystem.Save();
+            }
+        }
     }
     
     public float SFXVolume
     {
         get => SaveSystem.Data.sfxVolume;
-        set { SaveSystem.Data.sfxVolume = value; SaveSystem.Save(); }
+        set
+        {
+            if (AudioManager.Instance != null)
+                AudioManager.Instance.SetSfxVolume(value);
+            else
+            {
+                SaveSystem.Data.sfxVolume = value;
+                SaveSystem.Save();
+            }
+        }
     }
     
     public bool VibrationEnabled
     {
         get => SaveSystem.Data.vibrationEnabled;
-        set { SaveSystem.Data.vibrationEnabled = value; SaveSystem.Save(); }
+        set
+        {
+            if (AudioManager.Instance != null)
+                AudioManager.Instance.SetVibration(value);
+            else
+            {
+                SaveSystem.Data.vibrationEnabled = value;
+                SaveSystem.Save();
+            }
+        }
     }
 }

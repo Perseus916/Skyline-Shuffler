@@ -134,6 +134,12 @@ public class DailyRewardUI : MonoBehaviour
     {
         int finalReward = hasDoubled ? currentReward * 2 : currentReward;
         SaveSystem.AddCoins(finalReward);
+
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayButtonClick();
+            AudioManager.Instance.PlayCoinEarn();
+        }
         
         Debug.Log($"<color=green>Daily reward claimed: +{finalReward} coins{(hasDoubled ? " (DOUBLED!)" : "")}</color>");
         Hide();

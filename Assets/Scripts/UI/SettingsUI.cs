@@ -73,6 +73,8 @@ public class SettingsUI : MonoBehaviour
 
         if (panel != null)
             panel.SetActive(false);
+        else
+            gameObject.SetActive(false);
 
         if (GameManager.Instance != null)
             GameManager.Instance.HideSettings();

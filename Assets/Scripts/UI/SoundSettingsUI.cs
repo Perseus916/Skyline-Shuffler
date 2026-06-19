@@ -128,6 +128,9 @@ public class SoundSettingsUI : MonoBehaviour
 
     public void Close()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+            
         gameObject.SetActive(false);
     }
 }
