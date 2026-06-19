@@ -89,17 +89,8 @@ public class NPCManager : MonoBehaviour
             return;
         }
 
-        for (int i = 0; i < toSpawn; i++)
-        {
-            Waypoint spawnPoint = spawnWaypoints[Random.Range(0, spawnWaypoints.Count)];
-
-            // Pick a random prefab variant
-            NPCController prefab = npcPrefabs[Random.Range(0, npcPrefabs.Count)];
-
-            NPCController npc = Instantiate(prefab, spawnPoint.transform.position, Quaternion.identity);
-
-            npc.Initialize(spawnPoint);
-        }
+        // Spawn evenly across spawn points
+        SpawnEvenly(toSpawn);
     }
 
     /// <summary>
@@ -148,16 +139,41 @@ public class NPCManager : MonoBehaviour
             {
                 int batch = Mathf.Clamp(spawnBatchSize, 1, remaining);
 
-                for (int i = 0; i < batch; i++)
-                {
-                    Waypoint spawnPoint = spawnWaypoints[Random.Range(0, spawnWaypoints.Count)];
-                    NPCController prefab = npcPrefabs[Random.Range(0, npcPrefabs.Count)];
-                    NPCController npc = Instantiate(prefab, spawnPoint.transform.position, Quaternion.identity);
-                    npc.Initialize(spawnPoint);
-                }
+                // Spawn the batch evenly across waypoints
+                SpawnEvenly(batch);
             }
 
             yield return new WaitForSeconds(Mathf.Max(0.01f, spawnInterval));
+        }
+    }
+
+    /// <summary>
+    /// Spawn 'toSpawn' NPCs evenly across configured spawn waypoints.
+    /// If the count does not divide evenly, the first 'remainder' waypoints receive one extra NPC.
+    /// </summary>
+    private void SpawnEvenly(int toSpawn)
+    {
+        if (toSpawn <= 0) return;
+        if (spawnWaypoints == null || spawnWaypoints.Count == 0) return;
+
+        int pointCount = spawnWaypoints.Count;
+        int basePerPoint = toSpawn / pointCount;
+        int remainder = toSpawn % pointCount;
+
+        for (int i = 0; i < pointCount; i++)
+        {
+            int countForThisPoint = basePerPoint + (i < remainder ? 1 : 0);
+            if (countForThisPoint <= 0) continue;
+
+            Waypoint spawnPoint = spawnWaypoints[i];
+            if (spawnPoint == null) continue;
+
+            for (int j = 0; j < countForThisPoint; j++)
+            {
+                NPCController prefab = npcPrefabs[Random.Range(0, npcPrefabs.Count)];
+                NPCController npc = Instantiate(prefab, spawnPoint.transform.position, Quaternion.identity);
+                npc.Initialize(spawnPoint);
+            }
         }
     }
 
