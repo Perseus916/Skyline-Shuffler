@@ -30,21 +30,20 @@ public class PuzzleSolver
         this.stackHeight = stackHeight;
     }
     
+    // Default cap on visited states to prevent BFS explosion and main-thread freezes.
+    private const int DEFAULT_MAX_STATES = 5000;
+
     /// <summary>
     /// Find the shortest solution using BFS.
-    /// Prefers blue→green moves first, then falls back to any valid direction
-    /// so runtime hints still work on states that need a reverse move.
+    /// Uses a single pass with all valid moves (both directions) and a state cap
+    /// to prevent freezing on complex puzzles.
     /// </summary>
-    public List<MoveStep> FindShortestSolution(List<SlotData> slots, int maxMoves = 100)
+    public List<MoveStep> FindShortestSolution(List<SlotData> slots, int maxMoves = 30)
     {
-        var forwardOnly = FindShortestSolutionInternal(slots, maxMoves, true);
-        if (forwardOnly.Count > 0)
-            return forwardOnly;
-
-        return FindShortestSolutionInternal(slots, maxMoves, false);
+        return FindShortestSolutionInternal(slots, maxMoves, false, DEFAULT_MAX_STATES);
     }
 
-    private List<MoveStep> FindShortestSolutionInternal(List<SlotData> slots, int maxMoves, bool forwardOnly)
+    private List<MoveStep> FindShortestSolutionInternal(List<SlotData> slots, int maxMoves, bool forwardOnly, int maxStates)
     {
         int totalCapacity = stackHeight + 1;
 
@@ -69,6 +68,14 @@ public class PuzzleSolver
         
         while (queue.Count > 0)
         {
+            // Hard cap: stop exploring if we've visited too many states
+            // This prevents BFS from freezing the main thread on complex puzzles
+            if (visited.Count >= maxStates)
+            {
+                Debug.LogWarning($"PuzzleSolver: Hit state cap ({maxStates}). Stopping BFS early.");
+                break;
+            }
+
             StateSnapshot current = queue.Dequeue();
             
             // Stop if solution is too long
@@ -138,10 +145,7 @@ public class PuzzleSolver
             }
         }
         
-        if (forwardOnly)
-            Debug.LogWarning("No blue→green solution found; trying any direction.");
-        else
-            Debug.LogWarning("No solution found! Level may need redesign.");
+        Debug.LogWarning($"PuzzleSolver: No solution found (explored {visited.Count} states). Falling back to precomputed hints.");
         return new List<MoveStep>();
     }
     

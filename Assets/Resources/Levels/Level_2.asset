@@ -44,17 +44,17 @@ MonoBehaviour:
     floorStyles: []
   - gridPos: {x: 0, y: 0}
     isLocked: 1
-    isEmpty: 0
+    isEmpty: 1
     buildingStyle: {fileID: 0}
     floorStyles: []
   - gridPos: {x: 1, y: 0}
     isLocked: 1
-    isEmpty: 0
+    isEmpty: 1
     buildingStyle: {fileID: 0}
     floorStyles: []
   - gridPos: {x: 2, y: 0}
-    isLocked: 1
-    isEmpty: 0
+    isLocked: 0
+    isEmpty: 1
     buildingStyle: {fileID: 0}
     floorStyles: []
   solvingSteps:

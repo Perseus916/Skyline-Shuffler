@@ -637,6 +637,9 @@ public class BuildingStack : MonoBehaviour
                 int sendCount = Mathf.Max(1, NPCManager.Instance.NpcCount);
                 float maxDist = (npcSendMaxDistance > 0f) ? npcSendMaxDistance : Mathf.Infinity;
                 NPCManager.Instance.SendNPCsToBuilding(this, sendCount, maxDist);
+
+                // Broadcast celebration to nearby NPCs — they cheer when a building completes!
+                NPCManager.Instance.NotifyCelebration(transform.position);
             }
 
             // Auto-create a completion waypoint and connect it to nearby waypoints

@@ -135,6 +135,22 @@ public class LevelLoader : MonoBehaviour
         // Keep locked visual coverage consistent for levels that omit some slots.
         SpawnMissingLockedSlots(offset);
         
+        // Restore unlocked slots from saved state before rearranging floors
+        if (savedState != null && savedState.stacks != null)
+        {
+            foreach (var stackState in savedState.stacks)
+            {
+                if (stackState.gridX >= 0 && stackState.gridY >= 0)
+                {
+                    Vector2Int pos = new Vector2Int(stackState.gridX, stackState.gridY);
+                    if (lockedSlots.Any(s => s.gridPos == pos))
+                    {
+                        UnlockSpecificSlot(pos);
+                    }
+                }
+            }
+        }
+        
         // 3. Restore from saved state (rearranges floors)
         if (gameplayManager != null)
         {
@@ -359,6 +375,42 @@ public class LevelLoader : MonoBehaviour
         activeStacks.Add(stack);
 
         Debug.Log($"<color=yellow>Unlocked slot at {entry.gridPos}. Remaining locked: {lockedSlots.Count}</color>");
+        return stack;
+    }
+    
+    /// <summary>
+    /// Unlock a specific locked slot at runtime (used when restoring saved state).
+    /// </summary>
+    public BuildingStack UnlockSpecificSlot(Vector2Int gridPos)
+    {
+        if (lockedSlots == null || lockedSlots.Count == 0) return null;
+
+        var entry = lockedSlots.FirstOrDefault(s => s.gridPos == gridPos);
+        if (entry == null) return null;
+
+        lockedSlots.Remove(entry);
+
+        if (entry.foundation == null) return null;
+
+        // Remove locked visuals by resetting color
+        Renderer rend = entry.foundation.GetComponent<Renderer>();
+        if (rend != null)
+            rend.material.color = new Color(0.6f, 0.6f, 0.6f, 1f);
+
+        // Add BuildingStack component and make it playable
+        BuildingStack stack = entry.foundation.AddComponent<BuildingStack>();
+        stack.SetMaxStackHeight(currentStackHeight);
+        stack.SetGridPosition(entry.gridPos);
+
+        var emptyData = new SlotData { gridPos = entry.gridPos };
+        stack.InitializeFromData(emptyData, floorHeight);
+
+        entry.foundation.tag = "Floor";
+        entry.foundation.name = entry.foundation.name.Replace("_Locked", "_Unlocked");
+
+        activeStacks.Add(stack);
+
+        Debug.Log($"<color=yellow>Restored unlocked slot at {entry.gridPos}. Remaining locked: {lockedSlots.Count}</color>");
         return stack;
     }
     

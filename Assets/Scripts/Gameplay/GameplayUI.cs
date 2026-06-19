@@ -43,10 +43,13 @@ public class GameplayUI : MonoBehaviour
     
     [Header("Undo/Hint Labels")]
     [SerializeField] private Text undoCountText;
+    [SerializeField] private TextMeshProUGUI undoCountTMP;
     [SerializeField] private Text hintCountText;
+    [SerializeField] private TextMeshProUGUI hintCountTMP;
     
     [Header("Unlock Button")]
     [SerializeField] private Text unlockCountText;       // Shows remaining locked blocks
+    [SerializeField] private TextMeshProUGUI unlockCountTMP; // Shows remaining locked blocks (TMP)
     [SerializeField] private GameObject unlockAdIcon;    // Shown when player has no coins but ad ready
     [SerializeField] private GameObject unlockButtonRoot; // Parent to hide when no locked blocks
     
@@ -57,7 +60,7 @@ public class GameplayUI : MonoBehaviour
     // Costs (must match GameplayManager)
     private const int UNDO_COIN_COST = 75;
     private const int HINT_COIN_COST = 150;
-    private const int UNLOCK_COIN_COST = 200;
+    private int UnlockCoinCost => gameplayManager != null ? gameplayManager.GetUnlockCoinCost() : 200;
     
     private void OnEnable()
     {
@@ -175,7 +178,7 @@ public class GameplayUI : MonoBehaviour
         
         string displayStr = freeCount.ToString();
             
-        SetButtonText(undoButton, undoCountText, displayStr);
+        SetButtonText(undoButton, undoCountText, undoCountTMP, displayStr);
         
         // Show/hide ad icon (only if it is a separate GameObject from the button itself)
         if (undoAdIcon != null && (undoButton == null || undoAdIcon != undoButton.gameObject))
@@ -190,20 +193,25 @@ public class GameplayUI : MonoBehaviour
         
         string displayStr = freeCount.ToString();
             
-        SetButtonText(hintButton, hintCountText, displayStr);
+        SetButtonText(hintButton, hintCountText, hintCountTMP, displayStr);
         
         // Show/hide ad icon (only if it is a separate GameObject from the button itself)
         if (hintAdIcon != null && (hintButton == null || hintAdIcon != hintButton.gameObject))
             hintAdIcon.SetActive(!hasFree && !hasCoins && hasAd);
     }
 
-    private void SetButtonText(Button button, Text textComp, string text)
+    private void SetButtonText(Button button, Text textComp, TextMeshProUGUI tmpComp, string text)
     {
         if (textComp != null)
         {
             textComp.text = text;
         }
-        else if (button != null)
+        if (tmpComp != null)
+        {
+            tmpComp.text = text;
+        }
+        
+        if (textComp == null && tmpComp == null && button != null)
         {
             // Fallback: try to find TextMeshProUGUI in children
             var tmp = button.GetComponentInChildren<TextMeshProUGUI>();
@@ -233,7 +241,7 @@ public class GameplayUI : MonoBehaviour
         UpdateTotalStars();
         
         // Refresh unlock button ad icon state when coins change
-        bool hasCoinsForUnlock = total >= UNLOCK_COIN_COST;
+        bool hasCoinsForUnlock = total >= UnlockCoinCost;
         bool hasAdForUnlock = AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady();
         if (unlockAdIcon != null && (unlockButton == null || unlockAdIcon != unlockButton.gameObject))
         {
@@ -264,17 +272,12 @@ public class GameplayUI : MonoBehaviour
             unlockButton.gameObject.SetActive(lockedCount > 0);
         }
         
-        // Update the count label
-        if (unlockCountText != null)
-            unlockCountText.text = lockedCount.ToString();
-        else if (unlockButton != null)
-        {
-            var tmp = unlockButton.GetComponentInChildren<TextMeshProUGUI>();
-            if (tmp != null) tmp.text = lockedCount.ToString();
-        }
+        // Update the count label using SetButtonText
+        string displayStr = lockedCount.ToString();
+        SetButtonText(unlockButton, unlockCountText, unlockCountTMP, displayStr);
         
         // Show/hide ad icon
-        bool hasCoins = SaveSystem.GetCoins() >= UNLOCK_COIN_COST;
+        bool hasCoins = SaveSystem.GetCoins() >= UnlockCoinCost;
         bool hasAd = AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady();
         if (unlockAdIcon != null && (unlockButton == null || unlockAdIcon != unlockButton.gameObject))
             unlockAdIcon.SetActive(lockedCount > 0 && !hasCoins && hasAd);
@@ -318,8 +321,16 @@ public class GameplayUI : MonoBehaviour
             gameplayManager.TryUndo();
     }
     
+    // Debounce for hint button to prevent rapid-fire solver calls
+    private float lastHintClickTime = -1f;
+    private const float HINT_COOLDOWN = 0.5f;
+
     private void OnHintClicked()
     {
+        // Prevent rapid-fire: ignore clicks within cooldown window
+        if (Time.unscaledTime - lastHintClickTime < HINT_COOLDOWN) return;
+        lastHintClickTime = Time.unscaledTime;
+
         if (gameplayManager != null)
             gameplayManager.TryShowHint();
     }

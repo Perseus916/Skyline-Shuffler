@@ -1,10 +1,16 @@
 using System.Collections.Generic;
+using System.Collections;
 using UnityEngine;
 
 public class NPCController : MonoBehaviour
 {
     [SerializeField] float moveSpeed = 2f;
     [SerializeField] float rotationSpeed = 5f;
+
+    // Speed variation: each NPC gets a random multiplier within this range
+    [Header("Speed Variation")]
+    [SerializeField] float speedVariationMin = 0.75f;
+    [SerializeField] float speedVariationMax = 1.25f;
 
     // Separation settings
     [SerializeField] float separationRadius = 1f;
@@ -30,10 +36,31 @@ public class NPCController : MonoBehaviour
     [SerializeField] float enterReachDistance = 0.35f;
     [SerializeField] float vanishDelay = 0.6f; // time to scale down before destroy
 
+    // Idle stop settings
+    [Header("Random Idle Stops")]
+    [SerializeField] float idleChance = 0.25f; // chance to idle at each waypoint
+    [SerializeField] float idleMinDuration = 1f;
+    [SerializeField] float idleMaxDuration = 3f;
+
+    // Celebration settings
+    [Header("Celebration")]
+    [SerializeField] float celebrationDuration = 1.5f;
+
     private Waypoint currentWaypoint;
     private Waypoint targetWaypoint;
     private Waypoint previousWaypoint;
     private Animator animator;
+
+    // Per-NPC randomized speed multiplier (set on Initialize)
+    private float speedMultiplier = 1f;
+
+    // Idle state
+    private bool isIdling = false;
+    private float idleTimer = 0f;
+
+    // Celebration state
+    private bool isCelebrating = false;
+    private float celebrationTimer = 0f;
 
     // Track all NPC instances for simple local avoidance
     private static readonly List<NPCController> allNPCs = new List<NPCController>();
@@ -59,6 +86,12 @@ public class NPCController : MonoBehaviour
     public bool IsEnteringBuilding => isEnteringBuilding;
     private Vector3 enterTarget;
 
+    // Cached animator parameter hashes for safe checks
+    private bool hasSpeedParam = false;
+    private bool hasEnterParam = false;
+    private bool hasCheerParam = false;
+    private bool hasIdleParam = false;
+
     void Awake()
     {
         allNPCs.Add(this);
@@ -74,6 +107,26 @@ public class NPCController : MonoBehaviour
     void Start()
     {
         animator = GetComponent<Animator>();
+        CacheAnimatorParams();
+    }
+
+    /// <summary>
+    /// Cache which animator parameters exist so we can safely set them without errors.
+    /// </summary>
+    private void CacheAnimatorParams()
+    {
+        if (animator == null) return;
+
+        foreach (AnimatorControllerParameter param in animator.parameters)
+        {
+            switch (param.name)
+            {
+                case "Speed": hasSpeedParam = true; break;
+                case "Enter": hasEnterParam = true; break;
+                case "Cheer": hasCheerParam = true; break;
+                case "Idle":  hasIdleParam = true;  break;
+            }
+        }
     }
 
     public void Initialize(Waypoint startWaypoint)
@@ -94,6 +147,15 @@ public class NPCController : MonoBehaviour
         stuckCandidateOrigin = null;
         stuckCandidateStuckCount = 0;
 
+        // Randomize speed per NPC for organic crowd feel
+        speedMultiplier = Random.Range(speedVariationMin, speedVariationMax);
+
+        // Reset idle/celebration
+        isIdling = false;
+        idleTimer = 0f;
+        isCelebrating = false;
+        celebrationTimer = 0f;
+
         ChooseNextWaypoint();
     }
 
@@ -102,6 +164,39 @@ public class NPCController : MonoBehaviour
         if (isEnteringBuilding)
         {
             MoveToEnterTarget();
+            return;
+        }
+
+        // Handle celebration pause
+        if (isCelebrating)
+        {
+            celebrationTimer -= Time.deltaTime;
+            if (celebrationTimer <= 0f)
+            {
+                isCelebrating = false;
+                if (animator != null && hasSpeedParam)
+                    animator.SetFloat("Speed", moveSpeed * speedMultiplier);
+            }
+            else
+            {
+                // Stay in place during celebration
+                if (animator != null && hasSpeedParam)
+                    animator.SetFloat("Speed", 0f);
+                return;
+            }
+        }
+
+        // Handle idle pause at waypoints
+        if (isIdling)
+        {
+            idleTimer -= Time.deltaTime;
+            if (animator != null && hasSpeedParam)
+                animator.SetFloat("Speed", 0f);
+
+            if (idleTimer <= 0f)
+            {
+                isIdling = false;
+            }
             return;
         }
 
@@ -166,12 +261,41 @@ public class NPCController : MonoBehaviour
         lastPosition = transform.position;
     }
 
+    // ──────────────────────────────────────────────────────────────────────
+    // CELEBRATION
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Called by NPCManager when a nearby building stack completes.
+    /// NPC briefly stops and plays a celebration reaction.
+    /// </summary>
+    public void Celebrate()
+    {
+        if (isEnteringBuilding) return;
+        if (isCelebrating) return;
+
+        isCelebrating = true;
+        celebrationTimer = celebrationDuration;
+
+        if (animator != null)
+        {
+            if (hasSpeedParam) animator.SetFloat("Speed", 0f);
+            if (hasCheerParam) animator.SetTrigger("Cheer");
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // ENTER BUILDING
+    // ──────────────────────────────────────────────────────────────────────
+
     /// <summary>
     /// Called by NPCManager (or other game systems) to send this NPC to a building entry point and disappear.
     /// </summary>
     public void StartEnterBuilding(Vector3 entryPosition)
     {
         isEnteringBuilding = true;
+        isIdling = false;
+        isCelebrating = false;
         enterTarget = entryPosition;
 
         // Stop regular waypoint movement
@@ -180,11 +304,8 @@ public class NPCController : MonoBehaviour
         // Optionally trigger enter animation
         if (animator != null)
         {
-            animator.SetFloat("Speed", 0f);
-            if (animator.HasState(0, Animator.StringToHash("Enter")))
-            {
-                animator.SetTrigger("Enter");
-            }
+            if (hasSpeedParam) animator.SetFloat("Speed", 0f);
+            if (hasEnterParam) animator.SetTrigger("Enter");
         }
 
         // Disable collider so NPC won't block others while entering
@@ -209,7 +330,7 @@ public class NPCController : MonoBehaviour
         }
 
         Vector3 moveDir = dir.normalized;
-        float speed = moveSpeed * enterApproachSpeedMultiplier;
+        float speed = moveSpeed * speedMultiplier * enterApproachSpeedMultiplier;
 
         Vector3 tentativeXZ = flatPos + moveDir * speed * Time.deltaTime;
         Vector3 tentativeWorld = new Vector3(tentativeXZ.x, transform.position.y, tentativeXZ.z);
@@ -225,24 +346,46 @@ public class NPCController : MonoBehaviour
         }
     }
 
-    System.Collections.IEnumerator VanishAndDestroy()
+    IEnumerator VanishAndDestroy()
     {
-        // Small delay to allow enter animation or effects
-        float elapsed = 0f;
         Vector3 startScale = transform.localScale;
-        while (elapsed < vanishDelay)
+        float elapsed = 0f;
+
+        // Phase 1: Quick bounce UP (0–20% of duration)
+        float bouncePhase = vanishDelay * 0.2f;
+        while (elapsed < bouncePhase)
         {
             elapsed += Time.deltaTime;
-            float t = Mathf.Clamp01(elapsed / vanishDelay);
-            float s = Mathf.Lerp(1f, 0f, t);
+            float t = Mathf.Clamp01(elapsed / bouncePhase);
+            float s = 1f + 0.15f * Mathf.Sin(t * Mathf.PI); // small bounce up to 1.15x
             transform.localScale = startScale * s;
             yield return null;
         }
 
-        // Finally destroy the NPC
+        // Phase 2: Shrink to zero with ease-in-back curve (20–100% of duration)
+        float shrinkPhase = vanishDelay * 0.8f;
+        float shrinkElapsed = 0f;
+        Vector3 bounceScale = transform.localScale;
+        while (shrinkElapsed < shrinkPhase)
+        {
+            shrinkElapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(shrinkElapsed / shrinkPhase);
+            // Ease-in-back: accelerates into the shrink with slight overshoot feel
+            float c1 = 1.70158f;
+            float c3 = c1 + 1f;
+            float eased = c3 * t * t * t - c1 * t * t;
+            float s = Mathf.Lerp(1f, 0f, eased);
+            transform.localScale = bounceScale * s;
+            yield return null;
+        }
+
+        transform.localScale = Vector3.zero;
         Destroy(this.gameObject);
-        yield break;
     }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // STUCK HANDLING
+    // ──────────────────────────────────────────────────────────────────────
 
     void HandleStuckReverse()
     {
@@ -296,6 +439,10 @@ public class NPCController : MonoBehaviour
         }
     }
 
+    // ──────────────────────────────────────────────────────────────────────
+    // GROUND SAMPLING
+    // ──────────────────────────────────────────────────────────────────────
+
     float SampleGroundHeight(Vector3 samplePosition)
     {
         Vector3 origin = samplePosition + Vector3.up * raycastHeight;
@@ -308,6 +455,10 @@ public class NPCController : MonoBehaviour
         // If no ground found, keep current y
         return transform.position.y;
     }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // MOVEMENT
+    // ──────────────────────────────────────────────────────────────────────
 
     void MoveToWaypoint()
     {
@@ -348,8 +499,11 @@ public class NPCController : MonoBehaviour
 
         Vector3 moveDir = (desiredDir + separation * separationStrength).normalized;
 
+        // Apply per-NPC speed multiplier
+        float actualSpeed = moveSpeed * speedMultiplier;
+
         // Compute tentative new position (XZ) and sample ground there
-        Vector3 tentativeXZ = new Vector3(transform.position.x, 0f, transform.position.z) + moveDir * moveSpeed * Time.deltaTime;
+        Vector3 tentativeXZ = new Vector3(transform.position.x, 0f, transform.position.z) + moveDir * actualSpeed * Time.deltaTime;
         Vector3 tentativeWorld = new Vector3(tentativeXZ.x, transform.position.y, tentativeXZ.z);
 
         // Check if ground exists under tentative position
@@ -424,15 +578,32 @@ public class NPCController : MonoBehaviour
             stuckCandidateOrigin = null;
             stuckCandidateStuckCount = 0;
 
+            // Random chance to idle at this waypoint
+            if (Random.value < idleChance)
+            {
+                isIdling = true;
+                idleTimer = Random.Range(idleMinDuration, idleMaxDuration);
+
+                if (animator != null)
+                {
+                    if (hasSpeedParam) animator.SetFloat("Speed", 0f);
+                    if (hasIdleParam) animator.SetTrigger("Idle");
+                }
+            }
+
             ChooseNextWaypoint();
         }
 
-        if (animator != null)
+        if (animator != null && hasSpeedParam)
         {
             // Pass actual speed to animator (magnitude of velocity-ish)
-            animator.SetFloat("Speed", moveSpeed);
+            animator.SetFloat("Speed", actualSpeed);
         }
     }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // WAYPOINT SELECTION
+    // ──────────────────────────────────────────────────────────────────────
 
     void ChooseNextWaypoint()
     {

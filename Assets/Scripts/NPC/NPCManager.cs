@@ -33,6 +33,21 @@ public class NPCManager : MonoBehaviour
     // How many NPCs to spawn at once each interval.
     [SerializeField] private int spawnBatchSize = 1;
 
+    [Header("Staggered Spawning")]
+    [Tooltip("Delay between each individual NPC spawn during a batch (avoids frame hitches).")]
+    [SerializeField] private float staggerDelay = 0.05f;
+
+    [Tooltip("Random XZ offset from spawn waypoint position so NPCs don't stack.")]
+    [SerializeField] private float spawnPositionJitter = 0.5f;
+
+    [Header("Celebration Broadcast")]
+    [Tooltip("Radius within which nearby NPCs react to a completed building.")]
+    [SerializeField] private float celebrationRadius = 15f;
+
+    [Header("Enter Building Stagger")]
+    [Tooltip("Delay between each NPC starting to enter a building.")]
+    [SerializeField] private float enterStaggerDelay = 0.3f;
+
     private Coroutine spawnCoroutine;
 
     void Awake()
@@ -89,8 +104,8 @@ public class NPCManager : MonoBehaviour
             return;
         }
 
-        // Spawn evenly across spawn points
-        SpawnEvenly(toSpawn);
+        // Spawn with stagger to avoid frame hitches
+        StartCoroutine(SpawnEvenlyStaggered(toSpawn));
     }
 
     /// <summary>
@@ -139,22 +154,24 @@ public class NPCManager : MonoBehaviour
             {
                 int batch = Mathf.Clamp(spawnBatchSize, 1, remaining);
 
-                // Spawn the batch evenly across waypoints
-                SpawnEvenly(batch);
+                // Spawn the batch with stagger
+                yield return StartCoroutine(SpawnEvenlyStaggered(batch));
             }
 
-            yield return new WaitForSeconds(Mathf.Max(0.01f, spawnInterval));
+            // Add slight randomization to interval for natural feel
+            float jitteredInterval = Mathf.Max(0.01f, spawnInterval + Random.Range(-0.5f, 0.5f));
+            yield return new WaitForSeconds(jitteredInterval);
         }
     }
 
     /// <summary>
-    /// Spawn 'toSpawn' NPCs evenly across configured spawn waypoints.
-    /// If the count does not divide evenly, the first 'remainder' waypoints receive one extra NPC.
+    /// Spawn 'toSpawn' NPCs evenly across configured spawn waypoints, staggered over multiple frames.
+    /// Each NPC is placed at a small random XZ offset from the waypoint so they don't stack on top of each other.
     /// </summary>
-    private void SpawnEvenly(int toSpawn)
+    private IEnumerator SpawnEvenlyStaggered(int toSpawn)
     {
-        if (toSpawn <= 0) return;
-        if (spawnWaypoints == null || spawnWaypoints.Count == 0) return;
+        if (toSpawn <= 0) yield break;
+        if (spawnWaypoints == null || spawnWaypoints.Count == 0) yield break;
 
         int pointCount = spawnWaypoints.Count;
         int basePerPoint = toSpawn / pointCount;
@@ -171,11 +188,66 @@ public class NPCManager : MonoBehaviour
             for (int j = 0; j < countForThisPoint; j++)
             {
                 NPCController prefab = npcPrefabs[Random.Range(0, npcPrefabs.Count)];
-                NPCController npc = Instantiate(prefab, spawnPoint.transform.position, Quaternion.identity);
+
+                // Random XZ offset from waypoint so NPCs don't stack at exact same spot
+                Vector3 basePos = spawnPoint.transform.position;
+                Vector3 jitter = new Vector3(
+                    Random.Range(-spawnPositionJitter, spawnPositionJitter),
+                    0f,
+                    Random.Range(-spawnPositionJitter, spawnPositionJitter)
+                );
+                Vector3 spawnPos = basePos + jitter;
+
+                NPCController npc = Instantiate(prefab, spawnPos, Quaternion.identity);
                 npc.Initialize(spawnPoint);
+
+                // Stagger: wait a bit before spawning next NPC
+                if (staggerDelay > 0f)
+                    yield return new WaitForSeconds(staggerDelay);
             }
         }
     }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // CELEBRATION BROADCAST
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Notify all NPCs within a given radius of a position to celebrate (e.g., stack completed).
+    /// Called from BuildingStack or other game systems.
+    /// </summary>
+    public void NotifyCelebration(Vector3 position, float radius)
+    {
+        if (radius <= 0f) radius = celebrationRadius;
+
+        float radiusSqr = radius * radius;
+        var all = NPCController.AllNPCs;
+        if (all == null || all.Count == 0) return;
+
+        foreach (var npc in all)
+        {
+            if (npc == null) continue;
+            if (npc.IsEnteringBuilding) continue;
+
+            float distSqr = Vector3.SqrMagnitude(npc.transform.position - position);
+            if (distSqr <= radiusSqr)
+            {
+                npc.Celebrate();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Overload using the default celebration radius.
+    /// </summary>
+    public void NotifyCelebration(Vector3 position)
+    {
+        NotifyCelebration(position, celebrationRadius);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // SEND NPCs TO BUILDING (with stagger)
+    // ──────────────────────────────────────────────────────────────────────
 
     /// <summary>
     /// Send up to 'count' nearest available NPCs to the building to enter and disappear.
@@ -188,6 +260,7 @@ public class NPCManager : MonoBehaviour
     /// <summary>
     /// Send up to 'count' nearest available NPCs to the building to enter and disappear,
     /// only considering NPCs within maxDistance world units.
+    /// NPCs enter with staggered timing for a more natural look.
     /// </summary>
     public void SendNPCsToBuilding(BuildingStack stack, int count, float maxDistance)
     {
@@ -221,13 +294,26 @@ public class NPCManager : MonoBehaviour
             return da.CompareTo(db);
         });
 
-        int sent = 0;
-        for (int i = 0; i < candidates.Count && sent < count; i++)
+        int toSend = Mathf.Min(candidates.Count, count);
+
+        // Start staggered enter coroutine
+        StartCoroutine(StaggeredEnterBuilding(candidates, toSend, entryPos));
+    }
+
+    /// <summary>
+    /// Sends NPCs to the building entry one by one with a small delay between each.
+    /// </summary>
+    private IEnumerator StaggeredEnterBuilding(List<NPCController> candidates, int count, Vector3 entryPos)
+    {
+        for (int i = 0; i < count && i < candidates.Count; i++)
         {
             var npc = candidates[i];
             if (npc == null) continue;
             npc.StartEnterBuilding(entryPos);
-            sent++;
+
+            // Wait a beat before sending the next NPC
+            if (enterStaggerDelay > 0f && i < count - 1)
+                yield return new WaitForSeconds(enterStaggerDelay);
         }
     }
 }
