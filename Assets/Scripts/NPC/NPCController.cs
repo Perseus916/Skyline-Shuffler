@@ -47,6 +47,13 @@ public class NPCController : MonoBehaviour
     private float stuckTimer = 0f;
     private float reverseCooldownTimer = 0f;
 
+    // Stuck recovery candidates: when stuck, try closest connected waypoints in order
+    // NPC should NOT go back to previous waypoint when stuck; instead try closest then next closest.
+    private List<Waypoint> stuckCandidates = null;
+    private int stuckCandidateIndex = 0;
+    private Waypoint stuckCandidateOrigin = null; // currentWaypoint when candidates were built
+    private int stuckCandidateStuckCount = 0; // how many stuck detections while targeting current candidate
+
     // Enter-building state
     private bool isEnteringBuilding = false;
     public bool IsEnteringBuilding => isEnteringBuilding;
@@ -80,6 +87,12 @@ public class NPCController : MonoBehaviour
         lastPosition = transform.position;
         stuckTimer = 0f;
         reverseCooldownTimer = 0f;
+
+        // reset stuck candidate state
+        stuckCandidates = null;
+        stuckCandidateIndex = 0;
+        stuckCandidateOrigin = null;
+        stuckCandidateStuckCount = 0;
 
         ChooseNextWaypoint();
     }
@@ -233,24 +246,53 @@ public class NPCController : MonoBehaviour
 
     void HandleStuckReverse()
     {
-        // Try to reverse to previous waypoint if available
-        if (previousWaypoint != null)
+        // New behavior per request:
+        // - Do NOT go back to previousWaypoint when stuck.
+        // - Instead build a list of connected waypoints sorted by XZ distance from the NPC's current position.
+        // - On first stuck choose the closest. If stuck again while still trying to reach that candidate,
+        //   advance to the next-closest candidate. Continue until a waypoint is reached.
+
+        if (currentWaypoint == null) return;
+
+        // If origin changed or we don't have candidates yet, build them
+        if (stuckCandidateOrigin != currentWaypoint || stuckCandidates == null || stuckCandidates.Count == 0)
         {
-            // swap current and target so NPC goes back
-            Waypoint oldTarget = targetWaypoint;
-            targetWaypoint = previousWaypoint;
-            previousWaypoint = currentWaypoint;
-            currentWaypoint = oldTarget; // set current to old target so path logic stays consistent
+            stuckCandidates = new List<Waypoint>(currentWaypoint.connectedWaypoints);
+            stuckCandidates.RemoveAll(w => w == null);
+
+            // Sort by XZ distance to this NPC
+            Vector3 pos = transform.position;
+            stuckCandidates.Sort((a, b) =>
+            {
+                float da = (new Vector3(a.transform.position.x, 0f, a.transform.position.z) - new Vector3(pos.x, 0f, pos.z)).sqrMagnitude;
+                float db = (new Vector3(b.transform.position.x, 0f, b.transform.position.z) - new Vector3(pos.x, 0f, pos.z)).sqrMagnitude;
+                return da.CompareTo(db);
+            });
+
+            stuckCandidateIndex = 0;
+            stuckCandidateStuckCount = 1; // first stuck attempt for this candidate
+            stuckCandidateOrigin = currentWaypoint;
         }
         else
         {
-            // Fallback: pick a random different connected waypoint
-            List<Waypoint> options = new List<Waypoint>(currentWaypoint.connectedWaypoints);
-            if (options.Count > 1)
+            // Still targeting candidates from same origin: increment stuck count and advance candidate after 2 attempts
+            stuckCandidateStuckCount++;
+            if (stuckCandidateStuckCount >= 2)
             {
-                options.Remove(targetWaypoint);
-                targetWaypoint = options[Random.Range(0, options.Count)];
+                // advance to next candidate if available
+                stuckCandidateIndex = Mathf.Min(stuckCandidateIndex + 1, stuckCandidates.Count - 1);
+                stuckCandidateStuckCount = 1;
             }
+        }
+
+        if (stuckCandidates == null || stuckCandidates.Count == 0) return;
+
+        Waypoint chosen = stuckCandidates[stuckCandidateIndex];
+        if (chosen != null)
+        {
+            // Set the chosen waypoint as the new target. Do not choose previousWaypoint.
+            previousWaypoint = currentWaypoint; // keep history but do not use it as target
+            targetWaypoint = chosen;
         }
     }
 
@@ -375,6 +417,13 @@ public class NPCController : MonoBehaviour
         if (distance < 0.2f)
         {
             currentWaypoint = targetWaypoint;
+
+            // Reached a waypoint: reset stuck candidate tracking
+            stuckCandidates = null;
+            stuckCandidateIndex = 0;
+            stuckCandidateOrigin = null;
+            stuckCandidateStuckCount = 0;
+
             ChooseNextWaypoint();
         }
 
@@ -387,6 +436,12 @@ public class NPCController : MonoBehaviour
 
     void ChooseNextWaypoint()
     {
+        // Reset stuck candidate tracking whenever a regular next waypoint is chosen
+        stuckCandidates = null;
+        stuckCandidateIndex = 0;
+        stuckCandidateOrigin = null;
+        stuckCandidateStuckCount = 0;
+
         List<Waypoint> options =
             new List<Waypoint>(currentWaypoint.connectedWaypoints);
 

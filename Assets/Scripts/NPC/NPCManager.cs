@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections;
 using UnityEngine;
 
 public class NPCManager : MonoBehaviour
@@ -23,6 +24,17 @@ public class NPCManager : MonoBehaviour
     // When true, NPCManager will auto-spawn in Start(). Set false to control spawning externally.
     [SerializeField] private bool spawnOnStart = false;
 
+    // When true, spawn repeatedly at intervals instead of a single burst on start.
+    [SerializeField] private bool spawnWithInterval = false;
+
+    // How many seconds between spawn batches when spawnWithInterval is true.
+    [SerializeField] private float spawnInterval = 5f;
+
+    // How many NPCs to spawn at once each interval.
+    [SerializeField] private int spawnBatchSize = 1;
+
+    private Coroutine spawnCoroutine;
+
     void Awake()
     {
         if (Instance != null && Instance != this)
@@ -38,7 +50,10 @@ public class NPCManager : MonoBehaviour
     {
         if (!spawnOnStart) return;
 
-        SpawnNPCs();
+        if (spawnWithInterval)
+            StartSpawning();
+        else
+            SpawnNPCs();
     }
 
     // Make spawning callable from other systems (LevelLoader will call this when the level is generated)
@@ -84,6 +99,65 @@ public class NPCManager : MonoBehaviour
             NPCController npc = Instantiate(prefab, spawnPoint.transform.position, Quaternion.identity);
 
             npc.Initialize(spawnPoint);
+        }
+    }
+
+    /// <summary>
+    /// Start spawning NPCs repeatedly using the configured interval and batch size.
+    /// If already spawning, this does nothing.
+    /// </summary>
+    public void StartSpawning()
+    {
+        if (spawnCoroutine != null) return;
+        spawnCoroutine = StartCoroutine(SpawnIntervalCoroutine());
+    }
+
+    /// <summary>
+    /// Stop the interval spawning if it is active.
+    /// </summary>
+    public void StopSpawning()
+    {
+        if (spawnCoroutine == null) return;
+        StopCoroutine(spawnCoroutine);
+        spawnCoroutine = null;
+    }
+
+    private IEnumerator SpawnIntervalCoroutine()
+    {
+        // Basic validation
+        if (npcPrefabs == null || npcPrefabs.Count == 0 || spawnWaypoints == null || spawnWaypoints.Count == 0)
+        {
+            yield break;
+        }
+
+        while (true)
+        {
+            // Count existing alive NPCs
+            int existing = 0;
+            var all = NPCController.AllNPCs;
+            if (all != null)
+            {
+                for (int i = 0; i < all.Count; i++)
+                {
+                    if (all[i] != null) existing++;
+                }
+            }
+
+            int remaining = Mathf.Max(0, npcCount - existing);
+            if (remaining > 0)
+            {
+                int batch = Mathf.Clamp(spawnBatchSize, 1, remaining);
+
+                for (int i = 0; i < batch; i++)
+                {
+                    Waypoint spawnPoint = spawnWaypoints[Random.Range(0, spawnWaypoints.Count)];
+                    NPCController prefab = npcPrefabs[Random.Range(0, npcPrefabs.Count)];
+                    NPCController npc = Instantiate(prefab, spawnPoint.transform.position, Quaternion.identity);
+                    npc.Initialize(spawnPoint);
+                }
+            }
+
+            yield return new WaitForSeconds(Mathf.Max(0.01f, spawnInterval));
         }
     }
 
