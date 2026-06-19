@@ -53,9 +53,18 @@ public class LevelMapManager : MonoBehaviour
 
     private void OnEnable()
     {
-        Regenerate();
+        // Defer generation until Unity finishes initializing the UI layout/viewport.
+        StartCoroutine(GenerateNextFrame());
+        // Auto-scroll kept for later debugging (currently may be commented out by design).
         StartCoroutine(ScrollToCurrentLevelRoutine());
     }
+
+    private IEnumerator GenerateNextFrame()
+    {
+        yield return new WaitForEndOfFrame();
+        Regenerate();
+    }
+
 
     private IEnumerator ScrollToCurrentLevelRoutine()
     {
