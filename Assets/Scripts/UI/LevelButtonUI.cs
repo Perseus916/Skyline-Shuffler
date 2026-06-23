@@ -62,10 +62,11 @@ public class LevelButtonUI : MonoBehaviour
 
         //------------------------------------
         // STEP 3: Button interactable
+        // Always interactable so locked buttons can be pressed to show the panel
         //------------------------------------
         if (button != null)
         {
-            button.interactable = isUnlocked;
+            button.interactable = true;
             button.onClick.RemoveAllListeners();
             button.onClick.AddListener(OnClick);
         }
@@ -152,11 +153,20 @@ public class LevelButtonUI : MonoBehaviour
         if (AudioManager.Instance != null)
             AudioManager.Instance.PlayButtonClick();
 
+        bool isUnlocked = SaveSystem.IsLevelUnlocked(levelNumber);
         LevelSelectUI levelSelectUI = GetComponentInParent<LevelSelectUI>();
 
-        if (levelSelectUI != null)
-            levelSelectUI.OnLevelSelected(levelNumber);
-        else if (GameManager.Instance != null)
-            GameManager.Instance.PlayLevel(levelNumber);
+        if (isUnlocked)
+        {
+            if (levelSelectUI != null)
+                levelSelectUI.OnLevelSelected(levelNumber);
+            else if (GameManager.Instance != null)
+                GameManager.Instance.PlayLevel(levelNumber);
+        }
+        else
+        {
+            if (levelSelectUI != null)
+                levelSelectUI.ShowLockedLevelPanel(levelNumber);
+        }
     }
 }

@@ -24,6 +24,9 @@ public class LevelMapManager : MonoBehaviour
     [Tooltip("Your existing level button prefab. Must include LevelButtonUI component.")]
     [SerializeField] private GameObject levelButtonPrefab;
 
+    [Tooltip("Button to focus/scroll back to the current active level when the user has scrolled away.")]
+    [SerializeField] private Button currentLevelTargetButton;
+
     [Header("Levels")]
     [Tooltip("Total amount of levels to generate (e.g., 200).")]
     [Min(1)]
@@ -104,20 +107,44 @@ public class LevelMapManager : MonoBehaviour
     [Range(0f, 1f)]
     [SerializeField] private float glowRingStartAlpha = 0.8f;
 
-    [Header("Candy Crush Path")]
-    [Tooltip("Horizontal sweep amplitude (how far left/right the road/nodes travel).")]
-    [SerializeField] private float horizontalAmplitude = 250f;
+    [Header("Pattern Coordinates")]
+    [Tooltip("Exact positions for the first 21 levels.")]
+    [SerializeField] private Vector2[] fixedPositions = new Vector2[]
+    {
+        new Vector2(353f, -49732f),  // Level 1
+        new Vector2(3f, -49561f),    // Level 2
+        new Vector2(-318f, -49545f), // Level 3
+        new Vector2(38f, -49342f),   // Level 4
+        new Vector2(-334f, -49175f), // Level 5
+        new Vector2(330f, -49038f),  // Level 6
+        new Vector2(-323f, -48865f), // Level 7
+        new Vector2(350f, -48698f),  // Level 8
+        new Vector2(3f, -48548f),    // Level 9
+        new Vector2(-318f, -48413f), // Level 10
+        new Vector2(3f, -48225f),    // Level 11
+        new Vector2(-334f, -48075f), // Level 12
+        new Vector2(330f, -47905f),  // Level 13
+        new Vector2(-323f, -47734f), // Level 14
+        new Vector2(350f, -47575f),  // Level 15
+        new Vector2(3f, -47408f),    // Level 16
+        new Vector2(-318f, -47250f), // Level 17
+        new Vector2(3f, -47085f),    // Level 18
+        new Vector2(-334f, -46930f), // Level 19
+        new Vector2(330f, -46750f),  // Level 20
+        new Vector2(-323f, -46588f)  // Level 21
+    };
 
-    [Tooltip("Custom X pattern for level map column alignments (0 = center, -1 = left, 1 = right). Repeating sequence.")]
-    [SerializeField] private float[] customXPattern = new float[] { 0f, -1f, 1f, -1f, 1f };
+    [Tooltip("Height of one repeating cycle (background tile height).")]
+    [SerializeField] private float cycleHeight = 1146f;
 
-    [Header("Spacing (Y)")]
-    [Tooltip("Y distance between each level button along the winding path.")]
-    [SerializeField] private float verticalSpacing = 110f;
+    [Tooltip("Padding added to the bottom of the ScrollView Content height.")]
+    [SerializeField] private float bottomPadding = 268f;
 
+    [Tooltip("Padding added to the top of the ScrollView Content height.")]
+    [SerializeField] private float topPadding = 300f;
 
-    [Tooltip("Starting Y position for levelIndex = 0 (Level 1). Final Y is: startY - (levelIndex * verticalSpacing).")]
-    [SerializeField] private float startY = 0f;
+    private bool isGeneratingMore = false;
+    private Coroutine scrollCoroutine;
 
 
     [Header("Behavior")]
@@ -133,16 +160,86 @@ public class LevelMapManager : MonoBehaviour
 
     private void OnEnable()
     {
+        int currentLevel = 1;
+        if (SaveSystem.Data != null)
+        {
+            currentLevel = SaveSystem.Data.currentLevel;
+        }
+        totalLevels = Mathf.Max(200, currentLevel + 200);
+
+        if (currentLevelTargetButton != null)
+        {
+            currentLevelTargetButton.onClick.RemoveAllListeners();
+            currentLevelTargetButton.onClick.AddListener(ScrollToCurrentLevel);
+            currentLevelTargetButton.gameObject.SetActive(false);
+        }
+
+        ScrollRect scrollRect = content != null ? content.GetComponentInParent<ScrollRect>() : null;
+        if (scrollRect != null)
+        {
+            scrollRect.onValueChanged.RemoveListener(OnScrollValueChanged);
+            scrollRect.onValueChanged.AddListener(OnScrollValueChanged);
+        }
+
         // Defer generation until Unity finishes initializing the UI layout/viewport.
         StartCoroutine(GenerateNextFrame());
         // Auto-scroll kept for later debugging (currently may be commented out by design).
         StartCoroutine(ScrollToCurrentLevelRoutine());
     }
 
+    private void OnDisable()
+    {
+        ScrollRect scrollRect = content != null ? content.GetComponentInParent<ScrollRect>() : null;
+        if (scrollRect != null)
+        {
+            scrollRect.onValueChanged.RemoveListener(OnScrollValueChanged);
+        }
+    }
+
+    private void OnScrollValueChanged(Vector2 scrollPosition)
+    {
+        ScrollRect scrollRect = content != null ? content.GetComponentInParent<ScrollRect>() : null;
+        if (scrollRect == null) return;
+
+        // If the user scrolls near the top (e.g. verticalNormalizedPosition > 0.85f), generate more levels
+        if (scrollRect.verticalNormalizedPosition > 0.85f)
+        {
+            if (isGeneratingMore) return;
+            StartCoroutine(GenerateMoreLevelsRoutine());
+        }
+
+        UpdateTargetButtonVisibility();
+    }
+
+    private IEnumerator GenerateMoreLevelsRoutine()
+    {
+        isGeneratingMore = true;
+
+        // Save scroll position relative to bottom of content
+        Vector2 savedAnchoredPosition = content.anchoredPosition;
+
+        // Append 200 levels
+        totalLevels += 200;
+
+        // Regenerate level map
+        Regenerate();
+
+        // Wait for end of frame to ensure all UI elements are layouted and dimensions updated
+        yield return new WaitForEndOfFrame();
+
+        // Restore content position so there is no visual jumping or jittering
+        content.anchoredPosition = savedAnchoredPosition;
+
+        isGeneratingMore = false;
+
+        UpdateTargetButtonVisibility();
+    }
+
     private IEnumerator GenerateNextFrame()
     {
         yield return new WaitForEndOfFrame();
         Regenerate();
+        UpdateTargetButtonVisibility();
     }
 
 
@@ -150,13 +247,22 @@ public class LevelMapManager : MonoBehaviour
     {
         // Wait for end of frame so Unity can compute layout and viewport rect sizes
         yield return new WaitForEndOfFrame();
-        ScrollToCurrentLevel();
+        ScrollToCurrentLevel(false); // Instant scroll on startup
+    }
+
+    /// <summary>
+    /// Scroll the scroll view content to center on the player's current unlocked level.
+    /// Default overload that uses animation.
+    /// </summary>
+    public void ScrollToCurrentLevel()
+    {
+        ScrollToCurrentLevel(true);
     }
 
     /// <summary>
     /// Scroll the scroll view content to center on the player's current unlocked level.
     /// </summary>
-    public void ScrollToCurrentLevel()
+    public void ScrollToCurrentLevel(bool animate)
     {
         int currentLevel = 1;
         if (SaveSystem.Data != null)
@@ -168,9 +274,9 @@ public class LevelMapManager : MonoBehaviour
         currentLevel = Mathf.Clamp(currentLevel, 1, totalLevels);
 
         int levelIndex = currentLevel - 1;
-        float y = startY - ((totalLevels - 1 - levelIndex) * verticalSpacing);
+        float yAnchored = GetLevelPosition(levelIndex).y - GetLevelPosition(0).y + bottomPadding;
 
-        ScrollRect scrollRect = content.GetComponentInParent<ScrollRect>();
+        ScrollRect scrollRect = content != null ? content.GetComponentInParent<ScrollRect>() : null;
         if (scrollRect != null)
         {
             // Force Canvas update to ensure viewport rect sizes are computed correctly
@@ -183,18 +289,100 @@ public class LevelMapManager : MonoBehaviour
             }
 
             float viewportHeight = viewport != null ? viewport.rect.height : 800f;
-            float contentHeight = totalLevels * verticalSpacing;
+            float contentHeight = GetLevelPosition(totalLevels - 1).y - GetLevelPosition(0).y + bottomPadding + topPadding;
 
             // Target scroll Y position to center the level button in the viewport
-            float targetY = -y - (viewportHeight * 0.5f);
+            float targetY = (viewportHeight * 0.5f) - yAnchored;
 
-            // Clamp between top (0) and bottom (contentHeight - viewportHeight)
+            // Clamp between top (-maxScroll) and bottom (0)
             float maxScroll = contentHeight - viewportHeight;
             if (maxScroll < 0) maxScroll = 0;
-            targetY = Mathf.Clamp(targetY, 0, maxScroll);
+            targetY = Mathf.Clamp(targetY, -maxScroll, 0f);
 
-            content.anchoredPosition = new Vector2(content.anchoredPosition.x, targetY);
+            Vector2 targetPos = new Vector2(content.anchoredPosition.x, targetY);
+
+            if (animate && gameObject.activeInHierarchy)
+            {
+                if (scrollCoroutine != null)
+                {
+                    StopCoroutine(scrollCoroutine);
+                }
+                scrollCoroutine = StartCoroutine(SmoothScrollRoutine(targetPos));
+            }
+            else
+            {
+                content.anchoredPosition = targetPos;
+                UpdateTargetButtonVisibility();
+            }
         }
+    }
+
+    private IEnumerator SmoothScrollRoutine(Vector2 targetPosition)
+    {
+        float duration = 0.5f; // Smooth scroll duration in seconds
+        float elapsed = 0f;
+        Vector2 startPosition = content.anchoredPosition;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float percent = Mathf.Clamp01(elapsed / duration);
+
+            // Use smooth step interpolation (ease in / ease out)
+            float t = percent * percent * (3f - 2f * percent);
+
+            content.anchoredPosition = Vector2.Lerp(startPosition, targetPosition, t);
+            UpdateTargetButtonVisibility();
+            yield return null;
+        }
+
+        content.anchoredPosition = targetPosition;
+        UpdateTargetButtonVisibility();
+        scrollCoroutine = null;
+    }
+
+    /// <summary>
+    /// Checks scroll position and shows/hides the focus button based on distance to current level.
+    /// </summary>
+    private void UpdateTargetButtonVisibility()
+    {
+        if (currentLevelTargetButton == null) return;
+
+        ScrollRect scrollRect = content != null ? content.GetComponentInParent<ScrollRect>() : null;
+        if (scrollRect == null)
+        {
+            currentLevelTargetButton.gameObject.SetActive(false);
+            return;
+        }
+
+        int currentLevel = 1;
+        if (SaveSystem.Data != null)
+        {
+            currentLevel = SaveSystem.Data.currentLevel;
+        }
+        currentLevel = Mathf.Clamp(currentLevel, 1, totalLevels);
+        int levelIndex = currentLevel - 1;
+        float yAnchored = GetLevelPosition(levelIndex).y - GetLevelPosition(0).y + bottomPadding;
+
+        RectTransform viewport = scrollRect.viewport;
+        if (viewport == null)
+        {
+            viewport = scrollRect.GetComponent<RectTransform>();
+        }
+        float viewportHeight = viewport != null ? viewport.rect.height : 800f;
+        float contentHeight = GetLevelPosition(totalLevels - 1).y - GetLevelPosition(0).y + bottomPadding + topPadding;
+
+        float targetY = (viewportHeight * 0.5f) - yAnchored;
+        float maxScroll = contentHeight - viewportHeight;
+        if (maxScroll < 0) maxScroll = 0;
+        targetY = Mathf.Clamp(targetY, -maxScroll, 0f);
+
+        // If the scroll position is far from targetY, show the button
+        float distance = Mathf.Abs(content.anchoredPosition.y - targetY);
+
+        // Show if more than 60% of viewport height away from centering the current level button
+        bool shouldShow = distance > (viewportHeight * 0.6f);
+        currentLevelTargetButton.gameObject.SetActive(shouldShow);
     }
 
     /// <summary>
@@ -221,30 +409,28 @@ public class LevelMapManager : MonoBehaviour
             return;
         }
 
+        // Programmatically configure content anchors and pivot to bottom-center
+        content.anchorMin = new Vector2(0.5f, 0f);
+        content.anchorMax = new Vector2(0.5f, 0f);
+        content.pivot = new Vector2(0.5f, 0f);
+
         if (clearExistingChildren)
         {
-            // Clear any pre-existing buttons under Content to avoid duplicates.
+            // Clear any pre-existing children under Content to avoid duplicates.
             for (int i = content.childCount - 1; i >= 0; i--)
             {
                 Destroy(content.GetChild(i).gameObject);
             }
-
         }
 
         // Content height should cover the whole vertical span.
-        // You requested: totalLevels * verticalSpacing.
         Debug.Log($"[LevelMapManager] Before Resize Height: {content.sizeDelta.y}");
 
-        Vector2 size = new Vector2(content.sizeDelta.x, totalLevels * verticalSpacing);
+        float contentHeight = GetLevelPosition(totalLevels - 1).y - GetLevelPosition(0).y + bottomPadding + topPadding;
+        Vector2 size = new Vector2(content.sizeDelta.x, contentHeight);
         content.sizeDelta = size;
 
-
         Debug.Log($"[LevelMapManager] After Resize Height: {content.sizeDelta.y}");
-
-
-        // Center horizontally inside Content.
-        // Content pivot impacts this; we treat map center as the Content's rect center in local space.
-        float mapCenterX = content.rect.width * 0.5f;
 
         // Step 1: Pre-calculate all button positions and determine the player's current level
         int currentLevel = 1;
@@ -273,16 +459,16 @@ public class LevelMapManager : MonoBehaviour
             bgContainerRect.SetAsFirstSibling(); // ensure background is behind other UI
 
             RectTransform prefabRect = backgroundPrefab.GetComponent<RectTransform>();
-            float tileHeight = (prefabRect != null && prefabRect.rect.height > 0f) ? prefabRect.rect.height : (verticalSpacing * 4f);
+            float tileHeight = (prefabRect != null && prefabRect.rect.height > 0f) ? prefabRect.rect.height : 1000f;
             float spacing = backgroundTileSpacing > 0f ? backgroundTileSpacing : tileHeight;
 
-            // Top and bottom Y coordinates in content local space
-            float topY = startY;
-            float bottomY = startY - ((totalLevels - 1) * verticalSpacing);
+            // Start at bottom (0) and tile upwards
+            float bottomY = 0f;
+            float topY = contentHeight;
 
             int idx = 0;
-            // Place tiles from top to bottom, inclusive
-            for (float y = topY; y >= bottomY - spacing; y -= spacing)
+            // Place tiles from bottom to top, inclusive
+            for (float y = bottomY; y < topY + spacing; y += spacing)
             {
                 GameObject bg = Instantiate(backgroundPrefab, bgContainerRect);
                 bg.name = $"Background_{idx}";
@@ -290,10 +476,10 @@ public class LevelMapManager : MonoBehaviour
                 RectTransform r = bg.GetComponent<RectTransform>();
                 if (r != null)
                 {
-                    // Anchor to top-center so y positions align with our button placement coordinate system
-                    r.anchorMin = new Vector2(0.5f, 1f);
-                    r.anchorMax = new Vector2(0.5f, 1f);
-                    r.pivot = new Vector2(0.5f, 1f);
+                    // Anchor to bottom-center so y positions align with our bottom-anchored coordinate system
+                    r.anchorMin = new Vector2(0.5f, 0f);
+                    r.anchorMax = new Vector2(0.5f, 0f);
+                    r.pivot = new Vector2(0.5f, 0f);
                     r.anchoredPosition = new Vector2(0f, y);
                     r.localScale = Vector3.one;
                 }
@@ -322,10 +508,10 @@ public class LevelMapManager : MonoBehaviour
             {
                 // Calculate the speed along the curve to step by a constant distance: ds/dt = speed
                 float dt_epsilon = 0.01f;
-                float x1 = GetPositionOnCurve(t).x;
-                float x2 = GetPositionOnCurve(t + dt_epsilon).x;
-                float dx = (x2 - x1) / dt_epsilon;
-                float dy = verticalSpacing;
+                Vector2 pCurrent = GetPositionOnCurve(t);
+                Vector2 pNext = GetPositionOnCurve(t + dt_epsilon);
+                float dx = (pNext.x - pCurrent.x) / dt_epsilon;
+                float dy = (pNext.y - pCurrent.y) / dt_epsilon;
                 float speed = Mathf.Sqrt(dx * dx + dy * dy);
 
                 // If speed is zero (should not happen), fallback to spacing
@@ -354,10 +540,10 @@ public class LevelMapManager : MonoBehaviour
                 RectTransform dotRect = dotObj.GetComponent<RectTransform>();
                 if (dotRect != null)
                 {
-                    dotRect.anchorMin = new Vector2(0.5f, 1f);
-                    dotRect.anchorMax = new Vector2(0.5f, 1f);
+                    dotRect.anchorMin = new Vector2(0.5f, 0f);
+                    dotRect.anchorMax = new Vector2(0.5f, 0f);
                     dotRect.pivot = new Vector2(0.5f, 0.5f);
-                    dotRect.anchoredPosition = finalPos;
+                    dotRect.anchoredPosition = GetAnchoredPosition(finalPos);
 
                     // Determine rotation
                     float finalAngle = rotateToPathDirection ? (angle + dotRotationOffset) : dotRotationOffset;
@@ -434,12 +620,12 @@ public class LevelMapManager : MonoBehaviour
             }
 
             // Force a predictable UI anchoring so anchoredPosition behaves consistently.
-            buttonRect.anchorMin = new Vector2(0.5f, 1f);
-            buttonRect.anchorMax = new Vector2(0.5f, 1f);
+            buttonRect.anchorMin = new Vector2(0.5f, 0f);
+            buttonRect.anchorMax = new Vector2(0.5f, 0f);
             buttonRect.pivot = new Vector2(0.5f, 0.5f);
 
             // Place using anchoredPosition.
-            buttonRect.anchoredPosition = buttonPos;
+            buttonRect.anchoredPosition = GetAnchoredPosition(buttonPos);
 
             if (levelNumber <= 5)
             {
@@ -503,44 +689,60 @@ public class LevelMapManager : MonoBehaviour
     }
 
     /// <summary>
+    /// Gets the exact position of a level button based on the custom pattern.
+    /// </summary>
+    public Vector2 GetLevelPosition(int levelIndex)
+    {
+        levelIndex = Mathf.Clamp(levelIndex, 0, totalLevels - 1);
+
+        if (fixedPositions != null && levelIndex < fixedPositions.Length)
+        {
+            return fixedPositions[levelIndex];
+        }
+
+        // For levels beyond the fixed positions, repeat the cycle (levels 15 to 21, indices 14 to 20)
+        int steps = levelIndex - 14;
+        int cycle = steps / 7;
+        int rem = steps % 7;
+
+        int sourceIndex = 14 + rem;
+        Vector2 sourcePos = (fixedPositions != null && sourceIndex < fixedPositions.Length) 
+            ? fixedPositions[sourceIndex] 
+            : Vector2.zero;
+
+        float x = sourcePos.x;
+        float y = sourcePos.y + cycle * cycleHeight;
+
+        return new Vector2(x, y);
+    }
+
+    /// <summary>
+    /// Converts a negative absolute position to a bottom-anchored position.
+    /// </summary>
+    public Vector2 GetAnchoredPosition(Vector2 absolutePos)
+    {
+        float x = absolutePos.x;
+        float y = absolutePos.y - GetLevelPosition(0).y + bottomPadding;
+        return new Vector2(x, y);
+    }
+
+    /// <summary>
     /// Computes the exact position along the winding path at a continuous parameter t.
     /// </summary>
     public Vector2 GetPositionOnCurve(float t)
     {
-        float xMultiplier = GetInterpolatedX(t);
-        float x = xMultiplier * horizontalAmplitude;
-        float y = startY - ((totalLevels - 1 - t) * verticalSpacing);
-        return new Vector2(x, y);
-    }
-
-    private float GetPatternValue(int index)
-    {
-        if (customXPattern == null || customXPattern.Length == 0)
-        {
-            float[] fallback = new float[] { 0f, -1f, 1f, -1f, 1f };
-            int len = fallback.Length;
-            int mod = ((index % len) + len) % len;
-            return fallback[mod];
-        }
-        else
-        {
-            int len = customXPattern.Length;
-            int mod = ((index % len) + len) % len;
-            return customXPattern[mod];
-        }
-    }
-
-    private float GetInterpolatedX(float t)
-    {
         int i = Mathf.FloorToInt(t);
         float fraction = t - i;
 
-        float p0 = GetPatternValue(i - 1);
-        float p1 = GetPatternValue(i);
-        float p2 = GetPatternValue(i + 1);
-        float p3 = GetPatternValue(i + 2);
+        Vector2 p0 = GetLevelPosition(i - 1);
+        Vector2 p1 = GetLevelPosition(i);
+        Vector2 p2 = GetLevelPosition(i + 1);
+        Vector2 p3 = GetLevelPosition(i + 2);
 
-        return CatmullRom(p0, p1, p2, p3, fraction);
+        float x = CatmullRom(p0.x, p1.x, p2.x, p3.x, fraction);
+        float y = Mathf.Lerp(p1.y, p2.y, fraction);
+
+        return new Vector2(x, y);
     }
 
     private float CatmullRom(float p0, float p1, float p2, float p3, float t)
