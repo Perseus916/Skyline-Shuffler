@@ -124,6 +124,13 @@ public class LevelMapManager : MonoBehaviour
     [Tooltip("If true, clears existing children under Content before generating new buttons.")]
     [SerializeField] private bool clearExistingChildren = true;
 
+    [Header("Background Tiling")]
+    [Tooltip("Optional background prefab to tile vertically behind the path. Should be a UI prefab with a RectTransform.")]
+    [SerializeField] private GameObject backgroundPrefab;
+
+    [Tooltip("Vertical spacing between background tiles. If 0 or less the prefab RectTransform height will be used.")]
+    [SerializeField] private float backgroundTileSpacing = 0f;
+
     private void OnEnable()
     {
         // Defer generation until Unity finishes initializing the UI layout/viewport.
@@ -250,6 +257,48 @@ public class LevelMapManager : MonoBehaviour
         for (int levelIndex = 0; levelIndex < totalLevels; levelIndex++)
         {
             buttonPositions[levelIndex] = GetPositionOnCurve(levelIndex);
+        }
+
+        // Step 1.5: Optional Background tiling behind everything
+        if (backgroundPrefab != null)
+        {
+            GameObject bgContainer = new GameObject("BackgroundContainer", typeof(RectTransform));
+            RectTransform bgContainerRect = bgContainer.GetComponent<RectTransform>();
+            bgContainerRect.SetParent(content, false);
+            bgContainerRect.anchorMin = Vector2.zero;
+            bgContainerRect.anchorMax = Vector2.one;
+            bgContainerRect.sizeDelta = Vector2.zero;
+            bgContainerRect.anchoredPosition = Vector2.zero;
+            bgContainerRect.localScale = Vector3.one;
+            bgContainerRect.SetAsFirstSibling(); // ensure background is behind other UI
+
+            RectTransform prefabRect = backgroundPrefab.GetComponent<RectTransform>();
+            float tileHeight = (prefabRect != null && prefabRect.rect.height > 0f) ? prefabRect.rect.height : (verticalSpacing * 4f);
+            float spacing = backgroundTileSpacing > 0f ? backgroundTileSpacing : tileHeight;
+
+            // Top and bottom Y coordinates in content local space
+            float topY = startY;
+            float bottomY = startY - ((totalLevels - 1) * verticalSpacing);
+
+            int idx = 0;
+            // Place tiles from top to bottom, inclusive
+            for (float y = topY; y >= bottomY - spacing; y -= spacing)
+            {
+                GameObject bg = Instantiate(backgroundPrefab, bgContainerRect);
+                bg.name = $"Background_{idx}";
+
+                RectTransform r = bg.GetComponent<RectTransform>();
+                if (r != null)
+                {
+                    // Anchor to top-center so y positions align with our button placement coordinate system
+                    r.anchorMin = new Vector2(0.5f, 1f);
+                    r.anchorMax = new Vector2(0.5f, 1f);
+                    r.pivot = new Vector2(0.5f, 1f);
+                    r.anchoredPosition = new Vector2(0f, y);
+                    r.localScale = Vector3.one;
+                }
+                idx++;
+            }
         }
 
         // Step 2: Instantiate path dots along the winding curve

@@ -10456,7 +10456,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 8.634147
+  orthographic size: 10.650001
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -72176,6 +72176,8 @@ MonoBehaviour:
   verticalSpacing: 250
   startY: 0
   clearExistingChildren: 1
+  backgroundPrefab: {fileID: 8070692600161619483, guid: 709e474933ed2204e8562dcd843e9ea3, type: 3}
+  backgroundTileSpacing: 0
 --- !u!114 &2145533290
 MonoBehaviour:
   m_ObjectHideFlags: 0
