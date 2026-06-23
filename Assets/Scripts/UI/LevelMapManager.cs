@@ -29,14 +29,87 @@ public class LevelMapManager : MonoBehaviour
     [Min(1)]
     [SerializeField] private int totalLevels = 200;
 
+    [Header("Path Settings")]
+    [Tooltip("Prefab for the path points/dots between buttons. Should contain a RectTransform and Image component.")]
+    [SerializeField] private GameObject pathDotPrefab;
 
+    [Tooltip("Distance (in pixels) between each path point/dot.")]
+    [SerializeField] private float dotSpacing = 30f;
+
+    [Tooltip("Color of the path dots leading to an unlocked level.")]
+    [SerializeField] private Color unlockedPathColor = Color.white;
+
+    [Tooltip("Color of the path dots leading to a locked level.")]
+    [SerializeField] private Color lockedPathColor = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+
+    [Tooltip("Rotation offset (in degrees) for the path dots.")]
+    [SerializeField] private float dotRotationOffset = 0f;
+
+    [Tooltip("Pattern of scales for consecutive dots to create a rhythm (e.g. 1.2, 0.8, 0.8). Leave empty for constant scale.")]
+    [SerializeField] private float[] dotScalePattern = new float[] { 1.2f, 0.8f, 0.8f };
+
+    [Header("Path Variety & Scatter")]
+    [Tooltip("If true, rotates the path dots to align with the winding curve's direction.")]
+    [SerializeField] private bool rotateToPathDirection = true;
+
+    [Tooltip("If true, gives each path dot a random rotation for a scattered, natural look.")]
+    [SerializeField] private bool useRandomRotation = false;
+
+    [Tooltip("Minimum random rotation angle (in degrees).")]
+    [SerializeField] private float minRandomRotation = -15f;
+
+    [Tooltip("Maximum random rotation angle (in degrees).")]
+    [SerializeField] private float maxRandomRotation = 15f;
+
+    [Tooltip("If true, randomly flips the X and Y axes of the dots to prevent repetitive texture patterns.")]
+    [SerializeField] private bool useRandomFlip = false;
+
+    [Tooltip("Adds a small random offset (in pixels) to the position of each dot to make the path look organic.")]
+    [SerializeField] private float scatterAmount = 0f;
+
+    [Header("Path Animations")]
+    [Tooltip("If true, path dots leading to/on unlocked levels will animate with a flowing wave effect.")]
+    [SerializeField] private bool enableWaveAnimation = true;
+
+    [Tooltip("Speed of the wave animation.")]
+    [SerializeField] private float waveSpeed = 4f;
+
+    [Tooltip("Amount of scaling applied by the wave (e.g. 0.12 for 12% scale change).")]
+    [SerializeField] private float waveAmount = 0.12f;
+
+    [Tooltip("Delay between adjacent dots to create the flowing wave propagation.")]
+    [SerializeField] private float waveSpacingDelay = 0.25f;
+
+    [Header("Current Level Animation")]
+    [Tooltip("If true, applies a zoom in/zoom out pulse animation to the player's current active level button.")]
+    [SerializeField] private bool animateCurrentLevel = true;
+
+    [Tooltip("Speed of the pulse animation for the current level button.")]
+    [SerializeField] private float currentLevelPulseSpeed = 3f;
+
+    [Tooltip("Amount of scaling applied to the current level button (e.g. 0.12 for 12%).")]
+    [SerializeField] private float currentLevelPulseAmount = 0.12f;
+
+    [Header("Current Level Glow Ring")]
+    [Tooltip("Prefab for the glow/pulse ring around the current level button. Should contain a RectTransform and Image component.")]
+    [SerializeField] private GameObject glowRingPrefab;
+
+    [Tooltip("Speed of the glow ring pulse ripple.")]
+    [SerializeField] private float glowRingSpeed = 1.5f;
+
+    [Tooltip("Maximum scale size the glow ring expands to.")]
+    [SerializeField] private float glowRingMaxScale = 1.8f;
+
+    [Tooltip("Initial alpha transparency of the glow ring.")]
+    [Range(0f, 1f)]
+    [SerializeField] private float glowRingStartAlpha = 0.8f;
 
     [Header("Candy Crush Path")]
     [Tooltip("Horizontal sweep amplitude (how far left/right the road/nodes travel).")]
     [SerializeField] private float horizontalAmplitude = 250f;
 
-    [Tooltip("Horizontal sweep frequency for the S-curve (higher = more wiggles).")]
-    [SerializeField] private float horizontalFrequency = 0.25f;
+    [Tooltip("Custom X pattern for level map column alignments (0 = center, -1 = left, 1 = right). Repeating sequence.")]
+    [SerializeField] private float[] customXPattern = new float[] { 0f, -1f, 1f, -1f, 1f };
 
     [Header("Spacing (Y)")]
     [Tooltip("Y distance between each level button along the winding path.")]
@@ -166,26 +239,139 @@ public class LevelMapManager : MonoBehaviour
         // Content pivot impacts this; we treat map center as the Content's rect center in local space.
         float mapCenterX = content.rect.width * 0.5f;
 
+        // Step 1: Pre-calculate all button positions and determine the player's current level
+        int currentLevel = 1;
+        if (SaveSystem.Data != null)
+        {
+            currentLevel = SaveSystem.Data.currentLevel;
+        }
+
+        Vector2[] buttonPositions = new Vector2[totalLevels];
+        for (int levelIndex = 0; levelIndex < totalLevels; levelIndex++)
+        {
+            buttonPositions[levelIndex] = GetPositionOnCurve(levelIndex);
+        }
+
+        // Step 2: Instantiate path dots along the winding curve
+        if (pathDotPrefab != null)
+        {
+            GameObject pathContainer = new GameObject("PathContainer", typeof(RectTransform));
+            RectTransform pathContainerRect = pathContainer.GetComponent<RectTransform>();
+            pathContainerRect.SetParent(content, false);
+            pathContainerRect.anchorMin = Vector2.zero;
+            pathContainerRect.anchorMax = Vector2.one;
+            pathContainerRect.sizeDelta = Vector2.zero;
+            pathContainerRect.anchoredPosition = Vector2.zero;
+            pathContainerRect.localScale = Vector3.one;
+            pathContainerRect.SetAsFirstSibling(); // Draw in the background
+
+            float t = 0f;
+            Vector2 currentPos = GetPositionOnCurve(t);
+            int dotCount = 0;
+
+            while (t < totalLevels - 1)
+            {
+                // Calculate the speed along the curve to step by a constant distance: ds/dt = speed
+                float dt_epsilon = 0.01f;
+                float x1 = GetPositionOnCurve(t).x;
+                float x2 = GetPositionOnCurve(t + dt_epsilon).x;
+                float dx = (x2 - x1) / dt_epsilon;
+                float dy = verticalSpacing;
+                float speed = Mathf.Sqrt(dx * dx + dy * dy);
+
+                // If speed is zero (should not happen), fallback to spacing
+                float dt = speed > 0.001f ? (dotSpacing / speed) : 0.1f;
+                t += dt;
+
+                if (t > totalLevels - 1) break;
+
+                Vector2 nextPos = GetPositionOnCurve(t);
+                Vector2 dir = (nextPos - currentPos).normalized;
+                float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+
+                // Apply scatter offset if configured
+                Vector2 finalPos = nextPos;
+                if (scatterAmount > 0f)
+                {
+                    float scatterX = Random.Range(-scatterAmount, scatterAmount);
+                    float scatterY = Random.Range(-scatterAmount, scatterAmount);
+                    finalPos += new Vector2(scatterX, scatterY);
+                }
+
+                // Instantiate dot
+                GameObject dotObj = Instantiate(pathDotPrefab, pathContainerRect);
+                dotObj.name = $"PathDot_{dotCount}";
+
+                RectTransform dotRect = dotObj.GetComponent<RectTransform>();
+                if (dotRect != null)
+                {
+                    dotRect.anchorMin = new Vector2(0.5f, 1f);
+                    dotRect.anchorMax = new Vector2(0.5f, 1f);
+                    dotRect.pivot = new Vector2(0.5f, 0.5f);
+                    dotRect.anchoredPosition = finalPos;
+
+                    // Determine rotation
+                    float finalAngle = rotateToPathDirection ? (angle + dotRotationOffset) : dotRotationOffset;
+                    if (useRandomRotation)
+                    {
+                        finalAngle += Random.Range(minRandomRotation, maxRandomRotation);
+                    }
+                    dotRect.localRotation = Quaternion.Euler(0, 0, finalAngle);
+                }
+
+                // Apply size/scale patterns if configured
+                float baseScaleMultiplier = 1f;
+                if (dotScalePattern != null && dotScalePattern.Length > 0)
+                {
+                    baseScaleMultiplier = dotScalePattern[dotCount % dotScalePattern.Length];
+                }
+                Vector3 baseScale = Vector3.one * baseScaleMultiplier;
+
+                // Apply random flip if configured
+                if (useRandomFlip)
+                {
+                    float flipX = Random.value > 0.5f ? 1f : -1f;
+                    float flipY = Random.value > 0.5f ? 1f : -1f;
+                    baseScale.x *= flipX;
+                    baseScale.y *= flipY;
+                }
+
+                if (dotRect != null)
+                {
+                    dotRect.localScale = baseScale;
+                }
+
+                // Determine if this path point is unlocked
+                int leadingLevel = Mathf.CeilToInt(t + 1);
+                bool isUnlocked = leadingLevel <= currentLevel;
+
+                Image dotImage = dotObj.GetComponent<Image>();
+                if (dotImage != null)
+                {
+                    dotImage.color = isUnlocked ? unlockedPathColor : lockedPathColor;
+                }
+
+                // Set up wave animation
+                if (enableWaveAnimation)
+                {
+                    PathDotUI anim = dotObj.GetComponent<PathDotUI>();
+                    if (anim == null)
+                    {
+                        anim = dotObj.AddComponent<PathDotUI>();
+                    }
+                    anim.SetupAnimation(isUnlocked, waveSpeed, waveAmount, dotCount * waveSpacingDelay, baseScale);
+                }
+
+                currentPos = nextPos;
+                dotCount++;
+            }
+        }
+
+        // Step 3: Instantiate level buttons
         for (int levelIndex = 0; levelIndex < totalLevels; levelIndex++)
         {
             int levelNumber = levelIndex + 1;
-
-
-            // Smooth winding route (sine wave) instead of fixed columns.
-            // Candy Crush-like wider sweeping horizontal motion.
-            // phase is based on levelIndex so the curve is continuous.
-            float x = Mathf.Sin(levelIndex * horizontalFrequency) * horizontalAmplitude;
-
-
-            // Candy-Crush ordering requirement:
-            // Level 1 at bottom, level increases upward.
-            // levelIndex is 0-based, so Level 200 (index 199) ends near the top.
-            float y = startY - ((totalLevels - 1 - levelIndex) * verticalSpacing);
-
-
-
-
-
+            Vector2 buttonPos = buttonPositions[levelIndex];
 
             // Instantiate.
             GameObject buttonObj = Instantiate(levelButtonPrefab, content);
@@ -204,20 +390,14 @@ public class LevelMapManager : MonoBehaviour
             buttonRect.pivot = new Vector2(0.5f, 0.5f);
 
             // Place using anchoredPosition.
-            buttonRect.anchoredPosition = new Vector2(x, y);
+            buttonRect.anchoredPosition = buttonPos;
 
-            if(levelNumber <= 5)
-{
-    Debug.Log($"Level {levelNumber}: {buttonRect.anchoredPosition}");
-}
-
-
-
-
-
+            if (levelNumber <= 5)
+            {
+                Debug.Log($"Level {levelNumber}: {buttonRect.anchoredPosition}");
+            }
 
             // Ensure its anchors/pivot don't fight anchoredPosition.
-            // (We don't overwrite anchors, but we can keep it at a sane scale.)
             buttonRect.localScale = Vector3.one;
 
             // Preserve existing lock/unlock, stars, and click wiring.
@@ -229,7 +409,99 @@ public class LevelMapManager : MonoBehaviour
             }
 
             buttonUI.Setup(levelNumber);
+
+            // Highlight current active level with a zoom in / zoom out pulse animation & glow ring
+            if (levelNumber == currentLevel)
+            {
+                if (animateCurrentLevel)
+                {
+                    CurrentLevelButtonAnimation anim = buttonObj.GetComponent<CurrentLevelButtonAnimation>();
+                    if (anim == null)
+                    {
+                        anim = buttonObj.AddComponent<CurrentLevelButtonAnimation>();
+                    }
+                    anim.pulseSpeed = currentLevelPulseSpeed;
+                    anim.pulseAmount = currentLevelPulseAmount;
+                }
+
+                if (glowRingPrefab != null)
+                {
+                    GameObject ringObj = Instantiate(glowRingPrefab, buttonObj.transform);
+                    ringObj.name = "GlowRing";
+                    ringObj.transform.SetAsFirstSibling(); // Render behind button graphics
+
+                    RectTransform ringRect = ringObj.GetComponent<RectTransform>();
+                    if (ringRect != null)
+                    {
+                        ringRect.anchorMin = new Vector2(0.5f, 0.5f);
+                        ringRect.anchorMax = new Vector2(0.5f, 0.5f);
+                        ringRect.pivot = new Vector2(0.5f, 0.5f);
+                        ringRect.anchoredPosition = Vector2.zero;
+                        ringRect.localScale = Vector3.one;
+                    }
+
+                    GlowRingAnimation ringAnim = ringObj.GetComponent<GlowRingAnimation>();
+                    if (ringAnim == null)
+                    {
+                        ringAnim = ringObj.AddComponent<GlowRingAnimation>();
+                    }
+                    ringAnim.pulseSpeed = glowRingSpeed;
+                    ringAnim.maxScaleMultiplier = glowRingMaxScale;
+                    ringAnim.startAlpha = glowRingStartAlpha;
+                }
+            }
         }
+    }
+
+    /// <summary>
+    /// Computes the exact position along the winding path at a continuous parameter t.
+    /// </summary>
+    public Vector2 GetPositionOnCurve(float t)
+    {
+        float xMultiplier = GetInterpolatedX(t);
+        float x = xMultiplier * horizontalAmplitude;
+        float y = startY - ((totalLevels - 1 - t) * verticalSpacing);
+        return new Vector2(x, y);
+    }
+
+    private float GetPatternValue(int index)
+    {
+        if (customXPattern == null || customXPattern.Length == 0)
+        {
+            float[] fallback = new float[] { 0f, -1f, 1f, -1f, 1f };
+            int len = fallback.Length;
+            int mod = ((index % len) + len) % len;
+            return fallback[mod];
+        }
+        else
+        {
+            int len = customXPattern.Length;
+            int mod = ((index % len) + len) % len;
+            return customXPattern[mod];
+        }
+    }
+
+    private float GetInterpolatedX(float t)
+    {
+        int i = Mathf.FloorToInt(t);
+        float fraction = t - i;
+
+        float p0 = GetPatternValue(i - 1);
+        float p1 = GetPatternValue(i);
+        float p2 = GetPatternValue(i + 1);
+        float p3 = GetPatternValue(i + 2);
+
+        return CatmullRom(p0, p1, p2, p3, fraction);
+    }
+
+    private float CatmullRom(float p0, float p1, float p2, float p3, float t)
+    {
+        return 0.5f * (
+            (2f * p1) +
+            (-p0 + p2) * t +
+            (2f * p0 - 5f * p1 + 4f * p2 - p3) * t * t +
+            (-p0 + 3f * p1 - 3f * p2 + p3) * t * t * t
+        );
     }
 }
 
