@@ -251,7 +251,7 @@ public class AudioManager : MonoBehaviour
     public void PlayMoveFailed()
     {
         PlaySFX(moveFailed, false);
-        HapticLight();
+        HapticFailure();
     }
     
     public void PlayUndo()
@@ -296,6 +296,7 @@ public class AudioManager : MonoBehaviour
     public void PlayCoinSpend()
     {
         PlayUISFX(coinSpend);
+        HapticMedium();
     }
     
     public void PlayStarEarn()
@@ -342,6 +343,26 @@ public class AudioManager : MonoBehaviour
         Handheld.Vibrate();
 #endif
     }
+
+    public void HapticFailure()
+    {
+        if (!SaveSystem.Data.vibrationEnabled) return;
+        
+#if UNITY_ANDROID && !UNITY_EDITOR
+        StartCoroutine(FailureHapticRoutine());
+#elif UNITY_IOS && !UNITY_EDITOR
+        Handheld.Vibrate();
+#endif
+    }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+    private IEnumerator FailureHapticRoutine()
+    {
+        VibrateAndroid(20); // First light tap
+        yield return new WaitForSecondsRealtime(0.08f);
+        VibrateAndroid(50); // Second stronger tap
+    }
+#endif
     
 #if UNITY_ANDROID && !UNITY_EDITOR
     private void VibrateAndroid(long milliseconds)

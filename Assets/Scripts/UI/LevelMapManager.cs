@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using System.Collections;
 
 /// <summary>
 /// LevelMapManager
@@ -28,18 +29,7 @@ public class LevelMapManager : MonoBehaviour
     [Min(1)]
     [SerializeField] private int totalLevels = 200;
 
-    [Header("Zigzag Positions (X) - Centered in Content")]
-    [Tooltip("X position for phase 0 (left column), relative to map center.")]
-    [SerializeField] private float leftX = -240f;
 
-    [Tooltip("X position for phase 1 (center-left column), relative to map center.")]
-    [SerializeField] private float centerLeftX = -80f;
-
-    [Tooltip("X position for phase 2 (center-right column), relative to map center.")]
-    [SerializeField] private float centerRightX = 80f;
-
-    [Tooltip("X position for phase 3 (right column), relative to map center.")]
-    [SerializeField] private float rightX = 240f;
 
     [Header("Candy Crush Path")]
     [Tooltip("Horizontal sweep amplitude (how far left/right the road/nodes travel).")]
@@ -63,7 +53,68 @@ public class LevelMapManager : MonoBehaviour
 
     private void OnEnable()
     {
+        // Defer generation until Unity finishes initializing the UI layout/viewport.
+        StartCoroutine(GenerateNextFrame());
+        // Auto-scroll kept for later debugging (currently may be commented out by design).
+        StartCoroutine(ScrollToCurrentLevelRoutine());
+    }
+
+    private IEnumerator GenerateNextFrame()
+    {
+        yield return new WaitForEndOfFrame();
         Regenerate();
+    }
+
+
+    private IEnumerator ScrollToCurrentLevelRoutine()
+    {
+        // Wait for end of frame so Unity can compute layout and viewport rect sizes
+        yield return new WaitForEndOfFrame();
+        ScrollToCurrentLevel();
+    }
+
+    /// <summary>
+    /// Scroll the scroll view content to center on the player's current unlocked level.
+    /// </summary>
+    public void ScrollToCurrentLevel()
+    {
+        int currentLevel = 1;
+        if (SaveSystem.Data != null)
+        {
+            currentLevel = SaveSystem.Data.currentLevel;
+        }
+
+        // Clamp to valid range just in case
+        currentLevel = Mathf.Clamp(currentLevel, 1, totalLevels);
+
+        int levelIndex = currentLevel - 1;
+        float y = startY - ((totalLevels - 1 - levelIndex) * verticalSpacing);
+
+        ScrollRect scrollRect = content.GetComponentInParent<ScrollRect>();
+        if (scrollRect != null)
+        {
+            // Force Canvas update to ensure viewport rect sizes are computed correctly
+            Canvas.ForceUpdateCanvases();
+
+            RectTransform viewport = scrollRect.viewport;
+            if (viewport == null)
+            {
+                viewport = scrollRect.GetComponent<RectTransform>();
+            }
+
+            float viewportHeight = viewport != null ? viewport.rect.height : 800f;
+            float contentHeight = totalLevels * verticalSpacing;
+
+            // Target scroll Y position to center the level button in the viewport
+            float targetY = -y - (viewportHeight * 0.5f);
+
+            // Clamp between top (0) and bottom (contentHeight - viewportHeight)
+            float maxScroll = contentHeight - viewportHeight;
+            if (maxScroll < 0) maxScroll = 0;
+            targetY = Mathf.Clamp(targetY, 0, maxScroll);
+
+            content.anchoredPosition = new Vector2(content.anchoredPosition.x, targetY);
+        }
     }
 
     /// <summary>

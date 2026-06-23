@@ -1,6 +1,7 @@
 using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
+using System.Collections;
 /// <summary>
 /// Shop panel controller + purchase logic for Undo/Hint packs.
 /// Integrates with SaveSystem economy.
@@ -22,6 +23,15 @@ public class ShopManager : MonoBehaviour
     [Tooltip("TextMeshPro UI element that displays current coin balance.")]
     [SerializeField] private TextMeshProUGUI coinDisplayText;
 
+    [Header("Purchase Notification Panel (achive)")]
+    [Tooltip("The 'achive' panel GameObject.")]
+    [SerializeField] private GameObject achivePanel;
+    [Tooltip("The TextMeshProUGUI inside the 'achive' panel.")]
+    [SerializeField] private TextMeshProUGUI achiveText;
+    [SerializeField] private float notificationDuration = 2.0f;
+
+    private Coroutine notificationCoroutine;
+
     [Header("Buttons (optional runtime wiring)")]
     [Tooltip("If assigned, these are used to wire the OnClick events automatically on enable.")]
     [SerializeField] private Button buyUndo1Button;
@@ -36,6 +46,17 @@ public class ShopManager : MonoBehaviour
     [Header("Shop options")]
     [Tooltip("If true, undo/hint grants can only happen from shop purchases (not via other systems). Currently enabled by removing other grant logic elsewhere.")]
     [SerializeField] private bool shopOnlyConsumables = true;
+
+    [Header("Fail Feedback Visuals")]
+    [Tooltip("Optional: image for fullscreen red flash. If left unassigned, a temporary RedFlash image will be created at runtime.")]
+    [SerializeField] private Image redFlashImage;
+    [Tooltip("Optional: RectTransform to shake (e.g. the Shop Panel window). If unassigned, falls back to shopPanel's transform.")]
+    [SerializeField] private RectTransform shakeTarget;
+
+    private Coroutine shakeCoroutine;
+    private Coroutine flashCoroutine;
+    private Vector3 originalShakePos;
+    private bool hasStoredOriginalPos = false;
 
     private const int UNDO1_COST = 100;
     private const int UNDO1_AMOUNT = 1;
@@ -53,8 +74,16 @@ public class ShopManager : MonoBehaviour
     private const int HINT5_AMOUNT = 5;
     private void Awake()
     {
-        if (shopPanel != null)
+        if (Time.frameCount == 0 && shopPanel != null)
             shopPanel.SetActive(false);
+        
+        // Ensure the notification panel starts hidden and scaled to 0
+        if (achivePanel != null)
+        {
+            achivePanel.transform.localScale = Vector3.zero;
+            achivePanel.SetActive(false);
+        }
+
         RefreshCoinDisplay();
     }
     private void OnEnable()
@@ -65,22 +94,69 @@ public class ShopManager : MonoBehaviour
     private void OnDisable()
     {
         UnwireButtonsIfAssigned();
+
+        // Ensure positions and overlays are reset when panel is closed/disabled
+        if (shakeCoroutine != null)
+        {
+            StopCoroutine(shakeCoroutine);
+            shakeCoroutine = null;
+        }
+        if (hasStoredOriginalPos)
+        {
+            Transform target = shakeTarget != null ? shakeTarget : (shopPanel != null ? shopPanel.transform : transform);
+            if (target != null)
+            {
+                target.localPosition = originalShakePos;
+            }
+            hasStoredOriginalPos = false;
+        }
+
+        if (flashCoroutine != null)
+        {
+            StopCoroutine(flashCoroutine);
+            flashCoroutine = null;
+            
+            Image flashImage = redFlashImage;
+            if (flashImage == null)
+            {
+                Transform existingFlash = transform.Find("RedFlash") ?? (shopPanel != null ? shopPanel.transform.Find("RedFlash") : null);
+                if (existingFlash != null)
+                {
+                    flashImage = existingFlash.GetComponent<Image>();
+                }
+            }
+            if (flashImage != null)
+            {
+                flashImage.color = new Color(1f, 0f, 0f, 0f);
+            }
+        }
     }
     // 1) PANEL NAVIGATION
     public void OpenShop()
     {
         if (shopPanel != null)
+        {
             shopPanel.SetActive(true);
+        }
         RefreshCoinDisplay();
     }
     public void CloseShop()
     {
         if (shopPanel != null)
+        {
             shopPanel.SetActive(false);
+        }
+        else
+        {
+            gameObject.SetActive(false);
+        }
     }
     // Optional alternate name if your BACK button expects it.
     public void BackButton()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayButtonClick();
+            
         CloseShop();
     }
     // 2) PURCHASE LOGIC FOR BUTTONS
@@ -101,11 +177,21 @@ public class ShopManager : MonoBehaviour
     {
         if (amount <= 0) return;
         int coins = SaveSystem.GetCoins();
-        if (coins < coinCost) return;
+        if (coins < coinCost)
+        {
+            TriggerFailFeedback();
+            return;
+        }
 
         // Spend coins atomically.
         bool spent = SaveSystem.SpendCoins(coinCost);
         if (!spent) return;
+
+        // Play coin spend sound & trigger haptics
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayCoinSpend();
+        }
 
         // Grant consumables (shop-only policy).
         if (isUndo)
@@ -114,6 +200,10 @@ public class ShopManager : MonoBehaviour
             SaveSystem.AddFreeHints(amount);
 
         RefreshCoinDisplay();
+
+        // Show purchase success notification!
+        string itemName = isUndo ? (amount == 1 ? "Undo" : "Undos") : (amount == 1 ? "Hint" : "Hints");
+        ShowPurchaseNotification($"Purchased {amount} {itemName}!");
     }
 
     private void RefreshCoinDisplay()
@@ -143,5 +233,231 @@ public class ShopManager : MonoBehaviour
         if (buyHint2Button) buyHint2Button.onClick.RemoveListener(BuyHint2);
         if (buyHint5Button) buyHint5Button.onClick.RemoveListener(BuyHint5);
         if (backButton) backButton.onClick.RemoveListener(BackButton);
+    }
+
+    private void ShowPurchaseNotification(string message)
+    {
+        if (notificationCoroutine != null)
+        {
+            StopCoroutine(notificationCoroutine);
+        }
+        notificationCoroutine = StartCoroutine(AnimateNotification(message));
+    }
+
+    private IEnumerator AnimateNotification(string message)
+    {
+        if (achivePanel == null) yield break;
+
+        // Set the text
+        if (achiveText != null)
+        {
+            achiveText.text = message;
+        }
+
+        // Set active
+        achivePanel.SetActive(true);
+
+        // Animation timing configuration
+        float elapsed = 0f;
+        float popDuration = 0.4f;
+
+        // Easing colors: starts as an attractive vibrant bright gold and fades into clean white
+        Color startColor = new Color(1f, 0.88f, 0.2f, 0f); // Bright Gold, transparent at first
+        Color targetColor = Color.white; // Settle on white
+
+        // Spacing animation configuration
+        float startCharSpacing = 20f;  // widely spaced
+        float targetCharSpacing = 0f;  // normal
+
+        float startWordSpacing = 30f;  // widely spaced
+        float targetWordSpacing = 0f;  // normal
+
+        // 1. Elastic Pop Up + Text Easing In (color, character/word spacing, scale)
+        while (elapsed < popDuration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = elapsed / popDuration;
+            
+            // Back Out Easing curve: overshoots 1.0 slightly (to ~1.15) and bounces back smoothly
+            float c1 = 1.70158f;
+            float c3 = c1 + 1f;
+            float scale = 1f + c3 * Mathf.Pow(t - 1f, 3f) + c1 * Mathf.Pow(t - 1f, 2f);
+            achivePanel.transform.localScale = new Vector3(scale, scale, scale);
+
+            // Animate text elements
+            if (achiveText != null)
+            {
+                achiveText.color = Color.Lerp(startColor, targetColor, t);
+                achiveText.characterSpacing = Mathf.Lerp(startCharSpacing, targetCharSpacing, t);
+                achiveText.wordSpacing = Mathf.Lerp(startWordSpacing, targetWordSpacing, t);
+            }
+            
+            yield return null;
+        }
+
+        // Lock values at final state
+        achivePanel.transform.localScale = Vector3.one;
+        if (achiveText != null)
+        {
+            achiveText.color = targetColor;
+            achiveText.characterSpacing = targetCharSpacing;
+            achiveText.wordSpacing = targetWordSpacing;
+        }
+
+        // 2. Wait for display duration
+        yield return new WaitForSecondsRealtime(notificationDuration);
+
+        // 3. Smooth Scale Down + Text Fade Out & Disperse
+        elapsed = 0f;
+        float shrinkDuration = 0.2f;
+        Color fadeOutColor = new Color(targetColor.r, targetColor.g, targetColor.b, 0f); // fade to transparent
+
+        while (elapsed < shrinkDuration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = elapsed / shrinkDuration;
+            
+            // Ease out quad
+            float scale = 1f - (t * t);
+            achivePanel.transform.localScale = new Vector3(scale, scale, scale);
+
+            // Animate text fading out and dispersing characters slightly
+            if (achiveText != null)
+            {
+                achiveText.color = Color.Lerp(targetColor, fadeOutColor, t);
+                achiveText.characterSpacing = Mathf.Lerp(targetCharSpacing, 12f, t);
+                achiveText.wordSpacing = Mathf.Lerp(targetWordSpacing, 18f, t);
+            }
+            
+            yield return null;
+        }
+
+        achivePanel.transform.localScale = Vector3.zero;
+        achivePanel.SetActive(false);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // FAIL FEEDBACK (INSUFFICIENT COINS)
+    // ──────────────────────────────────────────────────────────────────────
+
+    private void TriggerFailFeedback()
+    {
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayMoveFailed();
+        }
+
+        if (shakeCoroutine != null)
+        {
+            StopCoroutine(shakeCoroutine);
+            Transform target = shakeTarget != null ? shakeTarget : (shopPanel != null ? shopPanel.transform : transform);
+            if (target != null && hasStoredOriginalPos)
+            {
+                target.localPosition = originalShakePos;
+            }
+        }
+        
+        if (flashCoroutine != null)
+        {
+            StopCoroutine(flashCoroutine);
+        }
+
+        shakeCoroutine = StartCoroutine(ShakeScreenRoutine());
+        flashCoroutine = StartCoroutine(RedFlashRoutine());
+    }
+
+    private IEnumerator ShakeScreenRoutine()
+    {
+        Transform target = shakeTarget != null ? shakeTarget : (shopPanel != null ? shopPanel.transform : transform);
+        if (target == null) yield break;
+
+        if (hasStoredOriginalPos)
+        {
+            target.localPosition = originalShakePos;
+        }
+        else
+        {
+            originalShakePos = target.localPosition;
+            hasStoredOriginalPos = true;
+        }
+
+        float elapsed = 0f;
+        float duration = 0.35f;
+        float magnitude = 12f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float percent = elapsed / duration;
+            float currentMagnitude = Mathf.Lerp(magnitude, 0f, percent);
+
+            float offsetX = Random.Range(-1f, 1f) * currentMagnitude;
+            float offsetY = Random.Range(-1f, 1f) * currentMagnitude;
+
+            target.localPosition = new Vector3(originalShakePos.x + offsetX, originalShakePos.y + offsetY, originalShakePos.z);
+            yield return null;
+        }
+
+        target.localPosition = originalShakePos;
+        hasStoredOriginalPos = false;
+    }
+
+    private IEnumerator RedFlashRoutine()
+    {
+        Image flashImage = redFlashImage;
+        
+        if (flashImage == null)
+        {
+            Transform existingFlash = transform.Find("RedFlash") ?? (shopPanel != null ? shopPanel.transform.Find("RedFlash") : null);
+            if (existingFlash != null)
+            {
+                flashImage = existingFlash.GetComponent<Image>();
+            }
+            
+            if (flashImage == null)
+            {
+                GameObject flashObj = new GameObject("RedFlash", typeof(RectTransform), typeof(Image));
+                flashObj.transform.SetParent(shopPanel != null ? shopPanel.transform : transform, false);
+                
+                RectTransform rect = flashObj.GetComponent<RectTransform>();
+                rect.anchorMin = Vector2.zero;
+                rect.anchorMax = Vector2.one;
+                rect.offsetMin = Vector2.zero;
+                rect.offsetMax = Vector2.zero;
+                
+                flashImage = flashObj.GetComponent<Image>();
+                flashImage.color = new Color(1f, 0f, 0f, 0f);
+                flashImage.raycastTarget = false;
+            }
+        }
+
+        if (flashImage == null) yield break;
+
+        flashImage.gameObject.SetActive(true);
+
+        float elapsed = 0f;
+        float duration = 0.4f;
+        float maxAlpha = 0.35f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float percent = elapsed / duration;
+
+            float alpha;
+            if (percent < 0.25f)
+            {
+                alpha = Mathf.Lerp(0f, maxAlpha, percent / 0.25f);
+            }
+            else
+            {
+                alpha = Mathf.Lerp(maxAlpha, 0f, (percent - 0.25f) / 0.75f);
+            }
+
+            flashImage.color = new Color(1f, 0f, 0f, alpha);
+            yield return null;
+        }
+
+        flashImage.color = new Color(1f, 0f, 0f, 0f);
     }
 }

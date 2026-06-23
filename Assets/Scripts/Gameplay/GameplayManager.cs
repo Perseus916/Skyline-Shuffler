@@ -16,6 +16,8 @@ using System.Linq;
 public class StackStateData
 {
     public int stackIndex;
+    public int gridX = -1; // Default to -1 so we can detect old saves
+    public int gridY = -1;
     public List<string> floorStyleNames = new(); // buildingName of each floor, bottom to top
 }
 
@@ -636,6 +638,8 @@ public class GameplayManager : MonoBehaviour
             StackStateData stackState = new StackStateData
             {
                 stackIndex = i,
+                gridX = allStacks[i].GridPosition.x,
+                gridY = allStacks[i].GridPosition.y,
                 floorStyleNames = allStacks[i].GetFloorStyleNames()
             };
             state.stacks.Add(stackState);
@@ -682,10 +686,23 @@ public class GameplayManager : MonoBehaviour
         }
         
         // 3. Redistribute floors according to saved state
-        for (int i = 0; i < savedState.stacks.Count && i < allStacks.Count; i++)
+        foreach (var stackState in savedState.stacks)
         {
-            var stackState = savedState.stacks[i];
-            var stack = allStacks[stackState.stackIndex < allStacks.Count ? stackState.stackIndex : i];
+            BuildingStack stack = null;
+            if (stackState.gridX >= 0 && stackState.gridY >= 0)
+            {
+                Vector2Int pos = new Vector2Int(stackState.gridX, stackState.gridY);
+                stack = allStacks.Find(s => s.GridPosition == pos);
+            }
+            
+            if (stack == null)
+            {
+                int idx = stackState.stackIndex;
+                if (idx >= 0 && idx < allStacks.Count)
+                    stack = allStacks[idx];
+            }
+            
+            if (stack == null) continue;
             
             // Skip ground floor entries (they're already in place)
             int groundCount = stack.GroundFloorCount;
@@ -748,7 +765,17 @@ public class GameplayManager : MonoBehaviour
     // ========================================
     
     /// <summary>
-    /// Unlock one locked block. Costs UNLOCK_COIN_COST coins, or a rewarded ad as fallback.
+    /// Get the cost to unlock a block, which scales for early levels.
+    /// </summary>
+    public int GetUnlockCoinCost()
+    {
+        if (currentLevelNumber == 1) return 20;
+        if (currentLevelNumber == 2) return 40;
+        return 200;
+    }
+
+    /// <summary>
+    /// Unlock one locked block. Costs coins (scaled level-wise), or a rewarded ad as fallback.
     /// </summary>
     public bool TryUnlockBlock()
     {
@@ -760,24 +787,25 @@ public class GameplayManager : MonoBehaviour
             return false;
         }
         
-        const int UNLOCK_COIN_COST = 200;
+        int unlockCoinCost = GetUnlockCoinCost();
 
-        bool spent = SaveSystem.SpendCoins(UNLOCK_COIN_COST);
+        bool spent = SaveSystem.SpendCoins(unlockCoinCost);
 
         if (!spent)
         {
             // Try rewarded ad
             if (AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady())
             {
-                AdManager.Instance.ShowFreeUndosAd(() =>
+                AdManager.Instance.ShowUnlockBlockAd(() =>
                 {
                     // On ad complete, unlock for free
                     PerformUnlockBlock();
                 });
+                return true;
             }
             else
             {
-                Debug.Log("<color=red>Not enough coins to unlock! Need " + UNLOCK_COIN_COST + " coins.</color>");
+                Debug.Log("<color=red>Not enough coins to unlock! Need " + unlockCoinCost + " coins.</color>");
             }
             return false;
         }
@@ -803,6 +831,9 @@ public class GameplayManager : MonoBehaviour
             newStack.FlashColor(new Color(1f, 0.9f, 0.2f, 1f), 0.6f);
             
             OnLockedBlockCountChanged?.Invoke(levelLoader.GetLockedSlotCount());
+            
+            // Save state immediately so the unlocked block is remembered
+            SaveInProgressState();
             
             Debug.Log($"<color=green>Block unlocked! Remaining locked: {levelLoader.GetLockedSlotCount()}</color>");
         }
@@ -987,7 +1018,9 @@ public class GameplayManager : MonoBehaviour
     
     /// <summary>
     /// Show a hint by highlighting the source and target stacks.
-    /// Costs one free hint or 100 coins.
+    /// Costs one free hint.
+    /// Checks consumable availability FIRST to avoid running the expensive solver
+    /// when the player has no hints left.
     /// </summary>
     public bool TryShowHint()
     {
@@ -995,15 +1028,28 @@ public class GameplayManager : MonoBehaviour
 
         if (levelComplete) return false;
 
+        // ── 1) Check consumable availability BEFORE running the solver ──
+        if (!unlimitedHintsEnabled)
+        {
+            if (SaveSystem.GetFreeHints() <= 0)
+            {
+                if (GameManager.Instance != null)
+                    GameManager.Instance.ShowShop();
+                return false;
+            }
+        }
+
         BuildingStack hintFrom = null;
         BuildingStack hintTo = null;
 
-        // 1) Runtime solver-first: build current slots and ask PuzzleSolver for shortest move
+        // ── 2) Runtime solver: build current state and find next best move ──
+        // Uses a capped BFS to avoid main-thread freezes.
         try
         {
             var currentSlots = BuildCurrentLevelState();
             var solver = new PuzzleSolver(stackHeight);
-            var solution = solver.FindShortestSolution(currentSlots, 100);
+            // maxMoves=30 + maxStates=5000 keeps BFS fast (< a few ms)
+            var solution = solver.FindShortestSolution(currentSlots, 30);
 
             if (solution != null && solution.Count > 0)
             {
@@ -1029,7 +1075,7 @@ public class GameplayManager : MonoBehaviour
             Debug.LogError($"Error running runtime solver: {ex}");
         }
 
-        // 2) If runtime solver didn't yield a valid mapping, try precomputed solution steps
+        // ── 3) Fallback: if runtime solver didn't yield valid stacks, try precomputed solution ──
         if (hintFrom == null || hintTo == null)
         {
             if (solutionSteps != null && solutionSteps.Count > 0)
@@ -1061,31 +1107,20 @@ public class GameplayManager : MonoBehaviour
             Debug.Log("<color=red>No valid hint available!</color>");
             return false;
         }
-        
-        // Check consumable availability (skip if unlimited hints enabled)
+
+        // ── 4) Consume the hint ──
         if (!unlimitedHintsEnabled)
         {
-            // Only allow hint if player has at least 1 free hint.
-            // When none are available, open the shop instead of spending coins/ads.
-            if (SaveSystem.GetFreeHints() <= 0)
-            {
-                if (GameManager.Instance != null)
-                    GameManager.Instance.ShowShop();
-                return false;
-            }
-
-
             bool hasFree = SaveSystem.UseFreeHint();
             if (!hasFree)
             {
-            // Shouldn't happen due to GetFreeHints check, but keep behavior safe.
-            var shop = FindFirstObjectByType<ShopManager>();
-            if (shop != null)
-                shop.OpenShop();
-            else if (GameManager.Instance != null)
-                GameManager.Instance.ShowShop();
-            return false;
-
+                // Shouldn't happen due to GetFreeHints check, but keep behavior safe.
+                var shop = FindFirstObjectByType<ShopManager>();
+                if (shop != null)
+                    shop.OpenShop();
+                else if (GameManager.Instance != null)
+                    GameManager.Instance.ShowShop();
+                return false;
             }
         }
 

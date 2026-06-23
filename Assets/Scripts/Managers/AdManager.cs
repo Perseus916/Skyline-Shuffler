@@ -14,7 +14,23 @@ using System;
 /// </summary>
 public class AdManager : MonoBehaviour
 {
-    public static AdManager Instance { get; private set; }
+    private static AdManager instance;
+    public static AdManager Instance
+    {
+        get
+        {
+            if (instance == null)
+            {
+                instance = FindObjectOfType<AdManager>();
+                if (instance == null)
+                {
+                    GameObject go = new GameObject("AdManager");
+                    instance = go.AddComponent<AdManager>();
+                }
+            }
+            return instance;
+        }
+    }
     
     [Header("LevelPlay Settings")]
     [Tooltip("Your ironSource/LevelPlay App Key from Unity Dashboard")]
@@ -35,13 +51,15 @@ public class AdManager : MonoBehaviour
     
     private void Awake()
     {
-        if (Instance != null && Instance != this)
+        if (instance != null && instance != this)
         {
             Destroy(gameObject);
             return;
         }
-        Instance = this;
+        instance = this;
         DontDestroyOnLoad(gameObject);
+        
+        InitializeAds();
     }
     
     private void Start()
@@ -55,6 +73,7 @@ public class AdManager : MonoBehaviour
     
     private void InitializeAds()
     {
+        if (isInitialized) return;
 #if !USE_IRONSOURCE || UNITY_EDITOR || (!UNITY_ANDROID && !UNITY_IOS)
         // In editor/standalone/stub mode, we stub everything
         isInitialized = true;
@@ -236,5 +255,11 @@ public class AdManager : MonoBehaviour
     public void ShowLevelBoostAd(Action onBoostGranted)
     {
         ShowRewardedAd("level_boost", onBoostGranted);
+    }
+    
+    /// <summary>Show ad for free slot unlock</summary>
+    public void ShowUnlockBlockAd(Action onUnlockGranted)
+    {
+        ShowRewardedAd("unlock_block", onUnlockGranted);
     }
 }

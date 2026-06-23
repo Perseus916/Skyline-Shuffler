@@ -134,7 +134,7 @@ public class LevelCompleteUI : MonoBehaviour
             rootCanvasGroup.blocksRaycasts = true;
         }
 
-        StartCoroutine(AnimateOpen());
+        StartCoroutine(AnimateOpen(coins));
     }
 
     // Backward compatible overload
@@ -154,7 +154,7 @@ public class LevelCompleteUI : MonoBehaviour
     // OPEN ANIMATION
     // ──────────────────────────────────────────────────────────────────────
 
-    private IEnumerator AnimateOpen()
+    private IEnumerator AnimateOpen(int coins)
     {
         isAnimating = true;
 
@@ -180,23 +180,35 @@ public class LevelCompleteUI : MonoBehaviour
                 if (starObjects[i] == null) continue;
 
                 bool earned = i < earnedStars;
-                starObjects[i].SetActive(true);
-                starObjects[i].transform.localScale = Vector3.zero;
 
                 if (earned)
+                {
+                    starObjects[i].SetActive(true);
+                    starObjects[i].transform.localScale = Vector3.zero;
+
+                    if (AudioManager.Instance != null)
+                    {
+                        AudioManager.Instance.PlayStarEarn();
+                    }
+
                     yield return StartCoroutine(
                         ScalePop(starObjects[i].transform, Vector3.zero, Vector3.one, starPopDuration, false));
+                    yield return new WaitForSeconds(starInterval);
+                }
                 else
-                    yield return StartCoroutine(
-                        ScaleTo(starObjects[i].transform, Vector3.one * 0.55f, starPopDuration * 0.5f));
-
-                yield return new WaitForSeconds(starInterval);
+                {
+                    starObjects[i].SetActive(false);
+                }
             }
         }
 
         yield return new WaitForSeconds(slideDelay);
 
         // Phase 4 ── Coins row slides up + fades in
+        if (coins > 0 && AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayCoinEarn();
+        }
         StartCoroutine(SlideUp(coinsRect, slideDuration));
         yield return new WaitForSeconds(0.10f);
 

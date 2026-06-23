@@ -54,6 +54,27 @@ public class Clouds : MonoBehaviour
     public Vector2 uiMoveDirection = Vector2.zero;
     public float uiMoveSpeed = 1f;
 
+    [Header("UI Respawn / Wrap")]
+    [Tooltip("When true, the UI object will wrap around to the opposite side of its parent when it goes off-screen.")]
+    public bool respawnUIObject = true;
+    [Tooltip("When true, randomizes the perpendicular position on respawn (e.g., Y position for horizontal wrapping) for variety.")]
+    public bool randomizeOffsetOnRespawn = true;
+    [Header("Custom Spawn Settings")]
+    [Tooltip("If true, uses the custom spawn coordinates below instead of parent Rect bounds.")]
+    public bool useCustomSpawnBounds = true;
+    [Tooltip("The X coordinate to wrap/spawn at.")]
+    public float customSpawnX = 1626f;
+    [Tooltip("The minimum Y coordinate for randomizing spawning position.")]
+    public float minSpawnY = -965f;
+    [Tooltip("The maximum Y coordinate for randomizing spawning position.")]
+    public float maxSpawnY = -63f;
+
+    [Header("Speed Randomization")]
+    [Tooltip("If true, randomizes the UI movement speed within the min/max values below.")]
+    public bool randomizeSpeed = true;
+    public float minMoveSpeed = 10f;
+    public float maxMoveSpeed = 80f;
+
     private RawImage rawImage;
     private RectTransform rectTransform;
 
@@ -74,6 +95,12 @@ public class Clouds : MonoBehaviour
         startScale = transform.localScale;
 
         rawImage.uvRect = new Rect(0, 0, textureScale.x, textureScale.y);
+
+        // Randomize speed on startup if enabled
+        if (randomizeSpeed)
+        {
+            uiMoveSpeed = Random.Range(minMoveSpeed, maxMoveSpeed);
+        }
 
         // Ensure initial alpha is applied
         ApplyAlphaImmediate(alpha);
@@ -185,6 +212,89 @@ public class Clouds : MonoBehaviour
 
         float dt = useUnscaledTime ? Time.unscaledDeltaTime : Time.deltaTime;
         rectTransform.anchoredPosition += uiMoveDirection.normalized * uiMoveSpeed * dt;
+
+        if (respawnUIObject)
+        {
+            float parentWidth = 0f;
+            float parentHeight = 0f;
+            float selfWidth = rectTransform.rect.width;
+            float selfHeight = rectTransform.rect.height;
+
+            RectTransform parentRect = rectTransform.parent as RectTransform;
+            if (parentRect != null)
+            {
+                parentWidth = parentRect.rect.width;
+                parentHeight = parentRect.rect.height;
+            }
+
+            // Decide the horizontal wrapping threshold
+            float xLimit = useCustomSpawnBounds ? customSpawnX : (parentWidth + selfWidth) * 0.5f;
+            float yLimit = (parentHeight + selfHeight) * 0.5f;
+
+            Vector2 pos = rectTransform.anchoredPosition;
+            bool didRespawn = false;
+
+            // Wrap X (Horizontal Movement)
+            if (uiMoveDirection.x > 0f && pos.x > xLimit)
+            {
+                pos.x = -xLimit;
+                didRespawn = true;
+            }
+            else if (uiMoveDirection.x < 0f && pos.x < -xLimit)
+            {
+                pos.x = xLimit;
+                didRespawn = true;
+            }
+
+            // Wrap Y (Vertical Movement)
+            if (uiMoveDirection.y > 0f && pos.y > yLimit)
+            {
+                pos.y = -yLimit;
+                didRespawn = true;
+            }
+            else if (uiMoveDirection.y < 0f && pos.y < -yLimit)
+            {
+                pos.y = yLimit;
+                didRespawn = true;
+            }
+
+            if (didRespawn)
+            {
+                // Handle perpendicular positioning upon wrap
+                if (useCustomSpawnBounds)
+                {
+                    if (uiMoveDirection.x != 0f)
+                    {
+                        // Randomize Y in the custom range provided (-63 to -965)
+                        pos.y = Random.Range(minSpawnY, maxSpawnY);
+                    }
+                    else if (uiMoveDirection.y != 0f)
+                    {
+                        // Randomize X in the custom range (-1626 to 1626)
+                        pos.x = Random.Range(-customSpawnX, customSpawnX);
+                    }
+                }
+                else if (randomizeOffsetOnRespawn)
+                {
+                    if (uiMoveDirection.x != 0f)
+                    {
+                        pos.y = Random.Range(-parentHeight * 0.35f, parentHeight * 0.35f);
+                    }
+                    else if (uiMoveDirection.y != 0f)
+                    {
+                        pos.x = Random.Range(-parentWidth * 0.35f, parentWidth * 0.35f);
+                    }
+                }
+
+                // Randomize speed on respawn for dynamic variation
+                if (randomizeSpeed)
+                {
+                    uiMoveSpeed = Random.Range(minMoveSpeed, maxMoveSpeed);
+                }
+            }
+
+            rectTransform.anchoredPosition = pos;
+        }
     }
 
     // Public helper to (re)start the opacity animation from the beginning
