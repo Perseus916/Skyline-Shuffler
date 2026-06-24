@@ -65047,9 +65047,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
   levelLoader: {fileID: 613160664}
   levelResourcePath: Levels/Level_
-  totalLevelsAvailable: 200
+  totalLevelsAvailable: 1000
   proceduralStartLevel: 101
-  proceduralEndLevel: 200
+  proceduralEndLevel: 1000
   runtimeBuildingLibrary: {fileID: 0}
   homePanel: {fileID: 1142068242}
   levelSelectPanel: {fileID: 1925332158}

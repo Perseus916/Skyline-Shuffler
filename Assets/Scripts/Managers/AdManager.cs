@@ -166,14 +166,15 @@ public class AdManager : MonoBehaviour
     /// Check if a rewarded ad is ready to show.
     /// Also respects cooldown timer.
     /// </summary>
-    public bool IsRewardedAdReady()
+    public bool IsRewardedAdReady(string placement = "")
     {
         if (!isInitialized) return false;
-        if (Time.time - lastAdShownTime < adCooldownSeconds) return false;
         
 #if !USE_IRONSOURCE || UNITY_EDITOR || (!UNITY_ANDROID && !UNITY_IOS)
         return true; // Always available in editor/standalone/stub mode
 #else
+        bool ignoreCooldown = (placement == "unlock_block");
+        if (!ignoreCooldown && Time.time - lastAdShownTime < adCooldownSeconds) return false;
         return IronSource.Agent.isRewardedVideoAvailable();
 #endif
     }
@@ -186,7 +187,7 @@ public class AdManager : MonoBehaviour
     /// <param name="onRewardGranted">Called when reward is earned</param>
     public void ShowRewardedAd(string placement, Action onRewardGranted)
     {
-        if (!IsRewardedAdReady())
+        if (!IsRewardedAdReady(placement))
         {
             Debug.LogWarning($"[AdManager] Ad not ready for placement: {placement}");
             return;

@@ -814,7 +814,7 @@ public class GameplayManager : MonoBehaviour
         if (!spent)
         {
             // Try rewarded ad
-            if (AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady())
+            if (AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady("unlock_block"))
             {
                 AdManager.Instance.ShowUnlockBlockAd(() =>
                 {

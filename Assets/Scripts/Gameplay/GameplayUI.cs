@@ -89,6 +89,7 @@ public class GameplayUI : MonoBehaviour
         // Reset initialization so we'll compute unlockUses on the next lockedCount event (level start)
         unlockUsesInitialized = false;
         
+        
         pauseButton?.onClick.RemoveAllListeners();
         homeButton?.onClick.RemoveAllListeners();
         restartButton?.onClick.RemoveAllListeners();
@@ -134,7 +135,6 @@ public class GameplayUI : MonoBehaviour
         UpdateUndoCount(SaveSystem.GetFreeUndos());
         UpdateHintCount(SaveSystem.GetFreeHints());
         UpdateTotalStars();
-        // Do NOT compute unlockUses here: it will be set when the level actually reports lockedCount via event
         UpdateUnlockButton(gameplayManager != null ? gameplayManager.GetLockedBlockCount() : 0);
         // Ensure UI shows current unlock uses (may be 0 until first event)
         UpdateUnlockCountText();
@@ -148,10 +148,9 @@ public class GameplayUI : MonoBehaviour
     private void OnDisable()
     {
         // Safe reset of timescale when leaving gameplay or UI disabled
-        Time.timeScale = 1f;
-        
         // Reset initialization so next enable/level start recomputes
         unlockUsesInitialized = false;
+        
 
         if (gameplayManager != null)
         {
@@ -296,7 +295,7 @@ public class GameplayUI : MonoBehaviour
         
         // Refresh unlock button ad icon state when coins change
         bool hasCoinsForUnlock = total >= UnlockCoinCost;
-        bool hasAdForUnlock = AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady();
+        bool hasAdForUnlock = AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady("unlock_block");
         if (unlockAdIcon != null && (unlockButton == null || unlockAdIcon != unlockButton.gameObject))
         {
             // Only show ad icon if there are still locked blocks (button is visible and interactable)
@@ -311,9 +310,6 @@ public class GameplayUI : MonoBehaviour
             totalStarsText.text = $"{SaveSystem.GetTotalStars()}";
     }
     
-    /// <summary>
-    /// Update the Unlock button's label and visibility based on how many locked blocks remain.
-    /// </summary>
     private void UpdateUnlockButton(int lockedCount)
     {
         // If this is the first lockedCount update for the level, compute initial unlock uses
@@ -340,7 +336,7 @@ public class GameplayUI : MonoBehaviour
         
         // Show/hide ad icon
         bool hasCoins = SaveSystem.GetCoins() >= UnlockCoinCost;
-        bool hasAd = AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady();
+        bool hasAd = AdManager.Instance != null && AdManager.Instance.IsRewardedAdReady("unlock_block");
         if (unlockAdIcon != null && (unlockButton == null || unlockAdIcon != unlockButton.gameObject))
             unlockAdIcon.SetActive(lockedCount > 0 && !hasCoins && hasAd);
         
