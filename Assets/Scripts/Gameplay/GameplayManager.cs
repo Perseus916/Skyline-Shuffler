@@ -281,7 +281,7 @@ public class GameplayManager : MonoBehaviour
     
     private void Update()
     {
-        if (levelComplete || isAnimating || Time.timeScale == 0f) return;
+        if (levelComplete || isAnimating || Time.timeScale == 0f || (GameManager.Instance != null && GameManager.Instance.IsTransitioning)) return;
         
         // Hints/undos are shop-only. (Debug unlimited hints removed)
         // Intentionally no keyboard handling here.
@@ -360,6 +360,17 @@ public class GameplayManager : MonoBehaviour
             else
             {
                 Debug.Log("<color=orange>Hit object has no BuildingStack in hierarchy</color>");
+                if (selectedStack != null && hit.collider.gameObject.name.Contains("_Locked"))
+                {
+                    TriggerGroundBuildingShake();
+                    if (AudioManager.Instance != null) AudioManager.Instance.PlayMoveFailed();
+                    
+                    Renderer rend = hit.collider.GetComponent<Renderer>();
+                    if (rend != null)
+                    {
+                        StartCoroutine(FlashLockedFoundationColor(rend));
+                    }
+                }
             }
         }
         else
@@ -1438,5 +1449,16 @@ public class GameplayManager : MonoBehaviour
         }
 
         mainCamera.transform.localPosition = originalPos;
+    }
+
+    private System.Collections.IEnumerator FlashLockedFoundationColor(Renderer rend)
+    {
+        Color originalColor = rend.material.color;
+        rend.material.color = errorColor;
+        yield return new WaitForSeconds(0.25f);
+        if (rend != null)
+        {
+            rend.material.color = originalColor;
+        }
     }
 }

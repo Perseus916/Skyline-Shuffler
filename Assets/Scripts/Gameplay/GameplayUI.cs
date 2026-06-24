@@ -33,6 +33,11 @@ public class GameplayUI : MonoBehaviour
     [SerializeField] private Button hintButton;
     [SerializeField] private Button unlockButton;  // Unlocks one locked block
     
+    [Header("Level Incomplete Panel")]
+    [SerializeField] private GameObject levelIncompletePanel;
+    [SerializeField] private Button incompleteHomeButton;
+    [SerializeField] private Button incompleteRestartButton;
+    
     [Header("Pause Panel")]
     [SerializeField] private GameObject pausePanel;
     [SerializeField] private Button resumeButton;
@@ -95,9 +100,16 @@ public class GameplayUI : MonoBehaviour
         pauseRestartButton?.onClick.AddListener(OnRestartClicked);
         pauseSettingsButton?.onClick.AddListener(OnSettingsClicked);
         
-        // Hide pause panel and reset timescale when enabling/loading level
+        incompleteHomeButton?.onClick.RemoveAllListeners();
+        incompleteRestartButton?.onClick.RemoveAllListeners();
+        incompleteHomeButton?.onClick.AddListener(OnHomeClicked);
+        incompleteRestartButton?.onClick.AddListener(OnRestartClicked);
+        
+        // Hide pause and incomplete panels and reset timescale when enabling/loading level
         if (pausePanel != null)
             pausePanel.SetActive(false);
+        if (levelIncompletePanel != null)
+            levelIncompletePanel.SetActive(false);
         Time.timeScale = 1f;
         
         // Show level number
@@ -159,6 +171,15 @@ public class GameplayUI : MonoBehaviour
                 percent = 1f - percent;
             }
             SetProgress(Mathf.Clamp01(percent));
+        }
+
+        if (limit > 0 && current >= limit)
+        {
+            ShowLevelIncompletePanel();
+        }
+        else
+        {
+            HideLevelIncompletePanel();
         }
     }
     
@@ -304,15 +325,53 @@ public class GameplayUI : MonoBehaviour
     private void OnHomeClicked()
     {
         Time.timeScale = 1f;
-        if (GameManager.Instance != null)
-            GameManager.Instance.ShowHomeScreen();
+        
+        // If all moves are exhausted (level failed), clear the in-progress game so they can't resume a failed state.
+        if (gameplayManager != null && gameplayManager.GetMoveCount() >= gameplayManager.GetMoveLimit())
+        {
+            SaveSystem.ClearInProgressGame();
+        }
+        
+        Transform bg = levelIncompletePanel != null ? levelIncompletePanel.transform.Find("bg") : null;
+        if (levelIncompletePanel != null && levelIncompletePanel.activeSelf && bg != null)
+        {
+            if (incompleteAnimCoroutine != null) StopCoroutine(incompleteAnimCoroutine);
+            incompleteAnimCoroutine = StartCoroutine(AnimateClosePanel(levelIncompletePanel, bg, () =>
+            {
+                levelIncompletePanel.SetActive(false);
+                if (GameManager.Instance != null)
+                    GameManager.Instance.ShowHomeScreen();
+            }));
+        }
+        else
+        {
+            HideLevelIncompletePanel();
+            if (GameManager.Instance != null)
+                GameManager.Instance.ShowHomeScreen();
+        }
     }
 
     private void OnRestartClicked()
     {
         Time.timeScale = 1f;
-        if (GameManager.Instance != null)
-            GameManager.Instance.ReplayLevel();
+        
+        Transform bg = levelIncompletePanel != null ? levelIncompletePanel.transform.Find("bg") : null;
+        if (levelIncompletePanel != null && levelIncompletePanel.activeSelf && bg != null)
+        {
+            if (incompleteAnimCoroutine != null) StopCoroutine(incompleteAnimCoroutine);
+            incompleteAnimCoroutine = StartCoroutine(AnimateClosePanel(levelIncompletePanel, bg, () =>
+            {
+                levelIncompletePanel.SetActive(false);
+                if (GameManager.Instance != null)
+                    GameManager.Instance.ReplayLevel();
+            }));
+        }
+        else
+        {
+            HideLevelIncompletePanel();
+            if (GameManager.Instance != null)
+                GameManager.Instance.ReplayLevel();
+        }
     }
     
     private void OnUndoClicked()
@@ -354,5 +413,88 @@ public class GameplayUI : MonoBehaviour
         {
             GameManager.Instance.ShowSettings();
         }
+    }
+
+    private Coroutine incompleteAnimCoroutine;
+
+    private void ShowLevelIncompletePanel()
+    {
+        if (levelIncompletePanel != null && !levelIncompletePanel.activeSelf)
+        {
+            levelIncompletePanel.SetActive(true);
+            
+            Transform bg = levelIncompletePanel.transform.Find("bg");
+            if (bg != null)
+            {
+                if (incompleteAnimCoroutine != null) StopCoroutine(incompleteAnimCoroutine);
+                incompleteAnimCoroutine = StartCoroutine(AnimateOpenPanel(bg));
+            }
+            
+            if (AudioManager.Instance != null)
+            {
+                AudioManager.Instance.PlayMoveFailed();
+            }
+        }
+    }
+
+    private void HideLevelIncompletePanel()
+    {
+        if (levelIncompletePanel != null && levelIncompletePanel.activeSelf)
+        {
+            Transform bg = levelIncompletePanel.transform.Find("bg");
+            if (bg != null)
+            {
+                if (incompleteAnimCoroutine != null) StopCoroutine(incompleteAnimCoroutine);
+                incompleteAnimCoroutine = StartCoroutine(AnimateClosePanel(levelIncompletePanel, bg, () => {
+                    levelIncompletePanel.SetActive(false);
+                }));
+            }
+            else
+            {
+                levelIncompletePanel.SetActive(false);
+            }
+        }
+    }
+
+    private System.Collections.IEnumerator AnimateOpenPanel(Transform panelTransform)
+    {
+        panelTransform.localScale = Vector3.zero;
+        float elapsed = 0f;
+        float duration = 0.25f;
+        
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = elapsed / duration;
+            float scale = EaseOutBack(t);
+            panelTransform.localScale = new Vector3(scale, scale, scale);
+            yield return null;
+        }
+        panelTransform.localScale = Vector3.one;
+    }
+
+    private System.Collections.IEnumerator AnimateClosePanel(GameObject panelObj, Transform panelTransform, System.Action onComplete)
+    {
+        float elapsed = 0f;
+        float duration = 0.15f;
+        Vector3 startScale = panelTransform.localScale;
+        
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = elapsed / duration;
+            float scale = Mathf.Lerp(startScale.x, 0f, t * t);
+            panelTransform.localScale = new Vector3(scale, scale, scale);
+            yield return null;
+        }
+        panelTransform.localScale = Vector3.zero;
+        onComplete?.Invoke();
+    }
+
+    private float EaseOutBack(float t)
+    {
+        const float c1 = 1.70158f;
+        const float c3 = c1 + 1f;
+        return 1f + c3 * Mathf.Pow(t - 1f, 3f) + c1 * Mathf.Pow(t - 1f, 2f);
     }
 }

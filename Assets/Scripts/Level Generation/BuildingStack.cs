@@ -204,9 +204,9 @@ public class BuildingStack : MonoBehaviour
         int effectiveMaxHeight = maxHeight + (groundFloorCount == 0 ? 1 : 0);
         if (MovableFloorCount >= effectiveMaxHeight) return false;
 
-        // Same-type rule applies only when destination already has movable floors.
-        // If stack is empty or has only ground floor, any style may be placed.
-        if (incomingStyle != null && MovableFloorCount > 0)
+        // Same-type rule applies when destination already has floors (ground or movable).
+        // If stack is completely empty (no ground floor), any style may be placed.
+        if (incomingStyle != null && floors.Count > 0)
         {
             BuildingStyleSO topStyle = floorStyleData[floorStyleData.Count - 1];
             if (topStyle != incomingStyle)
