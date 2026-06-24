@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -49,6 +50,9 @@ public class GameManager : MonoBehaviour
     public int TotalLevels => totalLevelsAvailable;
     private readonly Dictionary<int, LevelDataSO> proceduralLevelCache = new();
     private List<BuildingStyleSO> cachedProceduralStylePool;
+    
+    private CanvasGroup transitionCanvasGroup;
+    public bool IsTransitioning => transitionCanvasGroup != null && transitionCanvasGroup.alpha > 0f;
     
     // ========================================
     // LIFECYCLE
@@ -568,15 +572,59 @@ public class GameManager : MonoBehaviour
         return cachedProceduralStylePool;
     }
     
-    /// <summary>
-    /// Load and play a specific level (fresh start, no resume)
-    /// </summary>
-    public void PlayLevel(int levelNumber)
+    private void EnsureTransitionUI()
+    {
+        if (transitionCanvasGroup != null) return;
+
+        GameObject canvasGo = new GameObject("TransitionCanvas");
+        DontDestroyOnLoad(canvasGo);
+        
+        Canvas canvas = canvasGo.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 9999;
+
+        canvasGo.AddComponent<CanvasScaler>();
+        
+        transitionCanvasGroup = canvasGo.AddComponent<CanvasGroup>();
+        transitionCanvasGroup.alpha = 0f;
+        transitionCanvasGroup.blocksRaycasts = false;
+        transitionCanvasGroup.interactable = false;
+
+        GameObject imgGo = new GameObject("FadeImage");
+        imgGo.transform.SetParent(canvasGo.transform, false);
+        
+        Image img = imgGo.AddComponent<Image>();
+        img.color = Color.black;
+
+        RectTransform rect = img.GetComponent<RectTransform>();
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.sizeDelta = Vector2.zero;
+    }
+
+    private System.Collections.IEnumerator TransitionToLevelRoutine(int levelNumber)
     {
         LevelDataSO levelData = LoadLevelData(levelNumber);
-        if (levelData == null) return;
-        
-        // Clear any old in-progress state (fresh start)
+        if (levelData == null) yield break;
+
+        EnsureTransitionUI();
+
+        // Block raycasts
+        transitionCanvasGroup.blocksRaycasts = true;
+        transitionCanvasGroup.interactable = true;
+
+        // Fade Out
+        float elapsed = 0f;
+        float fadeDuration = 0.25f;
+        while (elapsed < fadeDuration)
+        {
+            elapsed += Time.deltaTime;
+            transitionCanvasGroup.alpha = Mathf.Clamp01(elapsed / fadeDuration);
+            yield return null;
+        }
+        transitionCanvasGroup.alpha = 1f;
+
+        // Load level
         SaveSystem.ClearInProgressGame();
         
         SelectedLevel = levelNumber;
@@ -587,68 +635,48 @@ public class GameManager : MonoBehaviour
         if (gameplayPanel != null) gameplayPanel.SetActive(true);
         if (AudioManager.Instance != null) AudioManager.Instance.PlayGameplayMusic();
         
-        // Load fresh — no saved state
         levelLoader.LoadLevel(levelData, levelNumber);
         
         OnLevelLoaded?.Invoke(levelNumber);
         Debug.Log($"<color=cyan>Playing Level {levelNumber} (fresh)</color>");
+
+        yield return new WaitForSeconds(0.1f);
+
+        // Fade In
+        elapsed = 0f;
+        while (elapsed < fadeDuration)
+        {
+            elapsed += Time.deltaTime;
+            transitionCanvasGroup.alpha = Mathf.Clamp01(1f - (elapsed / fadeDuration));
+            yield return null;
+        }
+        transitionCanvasGroup.alpha = 0f;
+
+        // Unblock raycasts
+        transitionCanvasGroup.blocksRaycasts = false;
+        transitionCanvasGroup.interactable = false;
+    }
+
+    /// <summary>
+    /// Load and play a specific level (fresh start, no resume)
+    /// </summary>
+    public void PlayLevel(int levelNumber)
+    {
+        EnsureTransitionUI();
+        StartCoroutine(TransitionToLevelRoutine(levelNumber));
     }
     
     /// <summary>
     /// Continue from last played / in-progress level.
-    /// If there's a saved state, restores exact floor positions and move count.
+    /// Always starts fresh from the beginning, clearing any partial save.
     /// </summary>
     public void ContinueGame()
     {
-        // Check for in-progress game first
-        if (SaveSystem.Data.hasInProgressGame)
-        {
-            int level = SaveSystem.Data.inProgressLevel;
-            LevelDataSO levelData = LoadLevelData(level);
-            if (levelData == null) 
-            {
-                // Fallback: corrupted save, start fresh
-                SaveSystem.ClearInProgressGame();
-                PlayLevel(Mathf.Max(1, SaveSystem.Data.currentLevel));
-                return;
-            }
-            
-            // Parse saved state
-            LevelStateData savedState = null;
-            try
-            {
-                savedState = JsonUtility.FromJson<LevelStateData>(SaveSystem.Data.inProgressState);
-            }
-            catch
-            {
-                Debug.LogWarning("Failed to parse in-progress state, starting fresh");
-            }
-            
-            if (savedState != null && ShouldResumeSavedState(savedState, level))
-            {
-                SelectedLevel = level;
-                
-                HideAllPanels();
-                if (gameplayPanel != null) gameplayPanel.SetActive(true);
-                if (AudioManager.Instance != null) AudioManager.Instance.PlayGameplayMusic();
-                
-                // Load level layout, then restore floor positions
-                levelLoader.LoadLevelWithRestore(levelData, level, savedState);
-                
-                OnLevelLoaded?.Invoke(level);
-                Debug.Log($"<color=green>Resuming Level {level} from saved state</color>");
-                return;
-            }
-
-            // Saved state is stale/incompatible - start fresh on the same level
-            SaveSystem.ClearInProgressGame();
-            PlayLevel(level);
-            return;
-        }
+        // Always start fresh! Clear any in-progress game and load the current level.
+        SaveSystem.ClearInProgressGame();
         
-        // No in-progress game — start next level
-        int nextLevel = Mathf.Max(1, SaveSystem.Data.currentLevel);
-        PlayLevel(nextLevel);
+        int level = Mathf.Max(1, SaveSystem.Data.currentLevel);
+        PlayLevel(level);
     }
 
     /// <summary>

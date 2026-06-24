@@ -73,7 +73,10 @@ public class LevelLoader : MonoBehaviour
                     ? currentLevelData.slots.FirstOrDefault(s => s.gridPos == pos)
                     : null;
 
-                SpawnSlotAtGridPos(pos, slot, offset);
+                if (slot != null)
+                {
+                    SpawnSlotAtGridPos(pos, slot, offset);
+                }
             }
         }
 
@@ -128,7 +131,10 @@ public class LevelLoader : MonoBehaviour
                     ? currentLevelData.slots.FirstOrDefault(s => s.gridPos == pos)
                     : null;
 
-                SpawnSlotAtGridPos(pos, slot, offset);
+                if (slot != null)
+                {
+                    SpawnSlotAtGridPos(pos, slot, offset);
+                }
             }
         }
 
