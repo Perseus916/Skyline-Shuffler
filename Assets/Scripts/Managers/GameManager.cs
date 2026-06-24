@@ -19,9 +19,9 @@ public class GameManager : MonoBehaviour
     [Header("Level Settings")]
     [Tooltip("Path inside Resources folder where levels are stored")]
     [SerializeField] private string levelResourcePath = "Levels/Level_";
-    [SerializeField] private int totalLevelsAvailable = 200;
+    [SerializeField] private int totalLevelsAvailable = 1000;
     [SerializeField] private int proceduralStartLevel = 101;
-    [SerializeField] private int proceduralEndLevel = 200;
+    [SerializeField] private int proceduralEndLevel = 1000;
     [SerializeField] private BuildingLibrarySO runtimeBuildingLibrary;
     
     [Header("UI Panels")]
