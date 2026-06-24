@@ -744,6 +744,15 @@ public class GameplayManager : MonoBehaviour
     public int GetMoveCount() => moveCount;
     public int GetMoveLimit() => moveLimit;
     public bool IsLevelComplete() => levelComplete;
+
+    /// <summary>
+    /// Returns the current number of locked slots in the loaded level (from LevelLoader).
+    /// Used by UI to read initial locked block count.
+    /// </summary>
+    public int GetLockedBlockCount()
+    {
+        return levelLoader != null ? levelLoader.GetLockedSlotCount() : 0;
+    }
     
     /// <summary>
     /// Returns all building stacks in the current level.

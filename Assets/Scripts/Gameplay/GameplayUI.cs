@@ -57,7 +57,7 @@ public class GameplayUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI unlockCountTMP; // Shows remaining locked blocks (TMP)
     [SerializeField] private GameObject unlockAdIcon;    // Shown when player has no coins but ad ready
     [SerializeField] private GameObject unlockButtonRoot; // Parent to hide when no locked blocks
-    
+
     [Header("Ad Indicators")]
     [SerializeField] private GameObject undoAdIcon;  // Small video icon shown when free = 0
     [SerializeField] private GameObject hintAdIcon;
@@ -66,7 +66,11 @@ public class GameplayUI : MonoBehaviour
     private const int UNDO_COIN_COST = 75;
     private const int HINT_COIN_COST = 150;
     private int UnlockCoinCost => gameplayManager != null ? gameplayManager.GetUnlockCoinCost() : 200;
-    
+
+    // Tracks how many times the unlock button can be used (initially half of locked slots, rounded up)
+    private int unlockUsesRemaining = 0;
+    private bool unlockUsesInitialized = false; // becomes true after first lockedCount update for a level
+
     private void OnEnable()
     {
         if (gameplayManager != null)
@@ -77,6 +81,13 @@ public class GameplayUI : MonoBehaviour
             gameplayManager.OnCoinsChanged.AddListener(UpdateCoins);
             gameplayManager.OnLockedBlockCountChanged.AddListener(UpdateUnlockButton);
         }
+
+        // Also listen for GameManager level-loaded event so we can initialize unlock uses when any level starts
+        if (GameManager.Instance != null)
+            GameManager.Instance.OnLevelLoaded.AddListener(OnLevelLoaded);
+        
+        // Reset initialization so we'll compute unlockUses on the next lockedCount event (level start)
+        unlockUsesInitialized = false;
         
         pauseButton?.onClick.RemoveAllListeners();
         homeButton?.onClick.RemoveAllListeners();
@@ -123,8 +134,10 @@ public class GameplayUI : MonoBehaviour
         UpdateUndoCount(SaveSystem.GetFreeUndos());
         UpdateHintCount(SaveSystem.GetFreeHints());
         UpdateTotalStars();
-        // Unlock button: start with 0 locked (will be refreshed via event when level loads)
-        UpdateUnlockButton(0);
+        // Do NOT compute unlockUses here: it will be set when the level actually reports lockedCount via event
+        UpdateUnlockButton(gameplayManager != null ? gameplayManager.GetLockedBlockCount() : 0);
+        // Ensure UI shows current unlock uses (may be 0 until first event)
+        UpdateUnlockCountText();
         
         if (gameplayManager != null)
         {
@@ -137,6 +150,9 @@ public class GameplayUI : MonoBehaviour
         // Safe reset of timescale when leaving gameplay or UI disabled
         Time.timeScale = 1f;
         
+        // Reset initialization so next enable/level start recomputes
+        unlockUsesInitialized = false;
+
         if (gameplayManager != null)
         {
             gameplayManager.OnMoveCountChanged.RemoveListener(UpdateMoveCounter);
@@ -144,6 +160,23 @@ public class GameplayUI : MonoBehaviour
             gameplayManager.OnHintCountChanged.RemoveListener(UpdateHintCount);
             gameplayManager.OnCoinsChanged.RemoveListener(UpdateCoins);
             gameplayManager.OnLockedBlockCountChanged.RemoveListener(UpdateUnlockButton);
+        }
+
+        if (GameManager.Instance != null)
+            GameManager.Instance.OnLevelLoaded.RemoveListener(OnLevelLoaded);
+    }
+
+    // Called by GameManager when a level is loaded/started
+    private void OnLevelLoaded(int levelNumber)
+    {
+        // Force re-initialize unlock uses from authoritative source at level start
+        unlockUsesInitialized = false;
+        if (gameplayManager != null)
+        {
+            int locked = gameplayManager.GetLockedBlockCount();
+            unlockUsesRemaining = (locked + 1) / 2;
+            unlockUsesInitialized = true;
+            UpdateUnlockButton(locked);
         }
     }
     
@@ -283,6 +316,14 @@ public class GameplayUI : MonoBehaviour
     /// </summary>
     private void UpdateUnlockButton(int lockedCount)
     {
+        // If this is the first lockedCount update for the level, compute initial unlock uses
+        if (!unlockUsesInitialized)
+        {
+            // Compute half behavior: if even -> half, if odd -> ((n-1)/2)+1 which equals (n+1)/2 (ceiling)
+            unlockUsesRemaining = (lockedCount + 1) / 2;
+            unlockUsesInitialized = true;
+        }
+
         // Hide the entire unlock button root if there are no locked blocks
         if (unlockButtonRoot != null)
         {
@@ -303,9 +344,21 @@ public class GameplayUI : MonoBehaviour
         if (unlockAdIcon != null && (unlockButton == null || unlockAdIcon != unlockButton.gameObject))
             unlockAdIcon.SetActive(lockedCount > 0 && !hasCoins && hasAd);
         
-        // Disable button if nothing to unlock
+        // Disable button if nothing to unlock or we've exhausted our allowed uses
         if (unlockButton != null)
-            unlockButton.interactable = lockedCount > 0;
+            unlockButton.interactable = lockedCount > 0 && unlockUsesRemaining > 0;
+
+        // Also update the unlock uses display
+        UpdateUnlockCountText();
+    }
+
+    private void UpdateUnlockCountText()
+    {
+        string text = unlockUsesRemaining.ToString();
+        if (unlockCountText != null)
+            unlockCountText.text = text;
+        if (unlockCountTMP != null)
+            unlockCountTMP.text = text;
     }
     
     private void OnPauseClicked()
@@ -396,8 +449,21 @@ public class GameplayUI : MonoBehaviour
     
     private void OnUnlockClicked()
     {
+        if (unlockUsesRemaining <= 0) return; // guard
+
         if (gameplayManager != null)
-            gameplayManager.TryUnlockBlock();
+        {
+            bool ok = gameplayManager.TryUnlockBlock();
+            if (ok)
+            {
+                // Reduce our local remaining uses and update UI
+                unlockUsesRemaining = Mathf.Max(0, unlockUsesRemaining - 1);
+                UpdateUnlockCountText();
+                // Also refresh button state in case we've exhausted uses or no locked remain
+                int currentLocked = gameplayManager.GetLockedBlockCount();
+                UpdateUnlockButton(currentLocked);
+            }
+        }
     }
 
     private void OnSettingsClicked()
