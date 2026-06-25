@@ -165,7 +165,7 @@ public class LevelMapManager : MonoBehaviour
         {
             currentLevel = SaveSystem.Data.currentLevel;
         }
-        totalLevels = Mathf.Max(200, currentLevel + 200);
+        totalLevels = Mathf.Min(1000, Mathf.Max(200, currentLevel + 200));
 
         if (currentLevelTargetButton != null)
         {
@@ -201,6 +201,8 @@ public class LevelMapManager : MonoBehaviour
         ScrollRect scrollRect = content != null ? content.GetComponentInParent<ScrollRect>() : null;
         if (scrollRect == null) return;
 
+        if (totalLevels >= 1000) return;
+
         // If the user scrolls near the top (e.g. verticalNormalizedPosition > 0.85f), generate more levels
         if (scrollRect.verticalNormalizedPosition > 0.85f)
         {
@@ -213,13 +215,18 @@ public class LevelMapManager : MonoBehaviour
 
     private IEnumerator GenerateMoreLevelsRoutine()
     {
+        if (totalLevels >= 1000)
+        {
+            isGeneratingMore = false;
+            yield break;
+        }
         isGeneratingMore = true;
 
         // Save scroll position relative to bottom of content
         Vector2 savedAnchoredPosition = content.anchoredPosition;
 
         // Append 200 levels
-        totalLevels += 200;
+        totalLevels = Mathf.Min(1000, totalLevels + 200);
 
         // Regenerate level map
         Regenerate();
@@ -401,6 +408,11 @@ public class LevelMapManager : MonoBehaviour
         {
             Debug.LogError("LevelMapManager: 'levelButtonPrefab' is not assigned.");
             return;
+        }
+
+        if (totalLevels > 1000)
+        {
+            totalLevels = 1000;
         }
 
         if (totalLevels < 1)

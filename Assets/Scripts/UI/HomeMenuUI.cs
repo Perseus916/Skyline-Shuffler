@@ -78,6 +78,10 @@ public class HomeMenuUI : MonoBehaviour
         if (playButtonText != null)
         {
             int nextLevel = SaveSystem.Data.currentLevel;
+            if (nextLevel > 1000)
+            {
+                nextLevel = 1000;
+            }
 
             if (nextLevel <= 1)
                 playButtonText.text = "Play";
