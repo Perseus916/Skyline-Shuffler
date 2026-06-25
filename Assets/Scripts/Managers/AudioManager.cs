@@ -40,6 +40,7 @@ public class AudioManager : MonoBehaviour
     [SerializeField] private AudioClip coinEarn;
     [SerializeField] private AudioClip coinSpend;
     [SerializeField] private AudioClip starEarn;
+    [SerializeField] private AudioClip achievementSound;
     
     [Header("Haptic Durations (ms)")]
     [SerializeField] private long lightHaptic = 10;
@@ -302,6 +303,12 @@ public class AudioManager : MonoBehaviour
     public void PlayStarEarn()
     {
         PlayUISFX(starEarn);
+        HapticMedium();
+    }
+    
+    public void PlayAchievement()
+    {
+        PlayUISFX(achievementSound);
         HapticMedium();
     }
     

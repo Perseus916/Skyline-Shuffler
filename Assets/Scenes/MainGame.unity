@@ -24624,13 +24624,14 @@ MonoBehaviour:
   moveFailed: {fileID: 8300000, guid: c07b78c81c5c5e34b8e6fa27e431102d, type: 3}
   undoSound: {fileID: 8300000, guid: ba513d43f6fbff8469690edd8f215c51, type: 3}
   hintSound: {fileID: 8300000, guid: ba513d43f6fbff8469690edd8f215c51, type: 3}
-  buttonClick: {fileID: 8300000, guid: ba513d43f6fbff8469690edd8f215c51, type: 3}
-  buttonBack: {fileID: 8300000, guid: ba513d43f6fbff8469690edd8f215c51, type: 3}
-  popupOpen: {fileID: 0}
-  popupClose: {fileID: 0}
-  coinEarn: {fileID: 0}
-  coinSpend: {fileID: 0}
-  starEarn: {fileID: 0}
+  buttonClick: {fileID: 8300000, guid: d7618c14d7042a34ebf0a64e203b5e8c, type: 3}
+  buttonBack: {fileID: 8300000, guid: d7618c14d7042a34ebf0a64e203b5e8c, type: 3}
+  popupOpen: {fileID: 8300000, guid: afb7549d5ef6e8f4398bed941efd3fc3, type: 3}
+  popupClose: {fileID: 8300000, guid: afb7549d5ef6e8f4398bed941efd3fc3, type: 3}
+  coinEarn: {fileID: 8300000, guid: 7a30a534301d7ea4689a1da2c2bb71ed, type: 3}
+  coinSpend: {fileID: 8300000, guid: 7a30a534301d7ea4689a1da2c2bb71ed, type: 3}
+  starEarn: {fileID: 8300000, guid: f0aa76b7275a1a84398e0c4fd076f29e, type: 3}
+  achievementSound: {fileID: 0}
   lightHaptic: 10
   mediumHaptic: 25
   heavyHaptic: 50
