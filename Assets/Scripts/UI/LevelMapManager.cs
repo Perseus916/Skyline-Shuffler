@@ -101,6 +101,9 @@ public class LevelMapManager : MonoBehaviour
     private float backgroundTileHeight = 1000f;
     private RectTransform backgroundContainer;
 
+    private System.Collections.Generic.Dictionary<int, GameObject> activeButtons = new System.Collections.Generic.Dictionary<int, GameObject>();
+    private System.Collections.Generic.List<int> keysToRemove = new System.Collections.Generic.List<int>();
+
 
     [Header("Behavior")]
     [Tooltip("If true, clears existing children under Content before generating new buttons.")]
@@ -156,11 +159,22 @@ public class LevelMapManager : MonoBehaviour
             backgroundContainer = null;
         }
         backgroundTiles = null;
+
+        // Clear active buttons
+        foreach (var kvp in activeButtons)
+        {
+            if (kvp.Value != null)
+            {
+                Destroy(kvp.Value);
+            }
+        }
+        activeButtons.Clear();
     }
 
     private void LateUpdate()
     {
         UpdateBackgroundPosition();
+        UpdateActiveButtons();
     }
 
     private void UpdateBackgroundPosition()
@@ -184,6 +198,172 @@ public class LevelMapManager : MonoBehaviour
     {
         float r = val % m;
         return r < 0 ? r + m : r;
+    }
+
+    private void GetVisibleLevelRange(out int startLevelIndex, out int endLevelIndex)
+    {
+        ScrollRect scrollRect = content != null ? content.GetComponentInParent<ScrollRect>() : null;
+        RectTransform viewport = null;
+        if (scrollRect != null)
+        {
+            viewport = scrollRect.viewport;
+            if (viewport == null)
+            {
+                viewport = scrollRect.GetComponent<RectTransform>();
+            }
+        }
+        float viewportHeight = viewport != null ? viewport.rect.height : 2000f;
+        if (viewportHeight <= 0f) viewportHeight = 2000f;
+
+        float minVisibleY = -content.anchoredPosition.y;
+        float maxVisibleY = minVisibleY + viewportHeight;
+
+        // Find the first index where anchoredY is near or above minVisibleY
+        startLevelIndex = 0;
+        for (int i = 0; i < totalLevels; i++)
+        {
+            float anchoredY = GetAnchoredPosition(GetLevelPosition(i)).y;
+            if (anchoredY >= minVisibleY)
+            {
+                startLevelIndex = i;
+                break;
+            }
+        }
+
+        // Apply a buffer of 5 buttons below
+        startLevelIndex = Mathf.Max(0, startLevelIndex - 5);
+
+        // Find the last index where anchoredY is near or below maxVisibleY
+        endLevelIndex = totalLevels - 1;
+        for (int i = startLevelIndex; i < totalLevels; i++)
+        {
+            float anchoredY = GetAnchoredPosition(GetLevelPosition(i)).y;
+            if (anchoredY > maxVisibleY)
+            {
+                endLevelIndex = i;
+                break;
+            }
+        }
+
+        // Apply a buffer of 5 buttons above
+        endLevelIndex = Mathf.Min(totalLevels - 1, endLevelIndex + 5);
+    }
+
+    private void UpdateActiveButtons()
+    {
+        if (content == null || levelButtonPrefab == null) return;
+
+        int startIdx, endIdx;
+        GetVisibleLevelRange(out startIdx, out endIdx);
+
+        // 1. Destroy and remove buttons outside the new visible range
+        keysToRemove.Clear();
+        foreach (var kvp in activeButtons)
+        {
+            int idx = kvp.Key;
+            if (idx < startIdx || idx > endIdx)
+            {
+                if (kvp.Value != null)
+                {
+                    Destroy(kvp.Value);
+                }
+                keysToRemove.Add(idx);
+            }
+        }
+        for (int i = 0; i < keysToRemove.Count; i++)
+        {
+            activeButtons.Remove(keysToRemove[i]);
+        }
+
+        // 2. Instantiate and setup buttons inside the new visible range
+        for (int i = startIdx; i <= endIdx; i++)
+        {
+            if (!activeButtons.ContainsKey(i))
+            {
+                InstantiateButton(i);
+            }
+        }
+    }
+
+    private void InstantiateButton(int levelIndex)
+    {
+        int levelNumber = levelIndex + 1;
+        Vector2 buttonPos = GetPositionOnCurve(levelIndex);
+
+        GameObject buttonObj = Instantiate(levelButtonPrefab, content);
+        buttonObj.name = $"LevelButton_{levelNumber}";
+
+        RectTransform buttonRect = buttonObj.GetComponent<RectTransform>();
+        if (buttonRect == null)
+        {
+            Debug.LogError($"LevelMapManager: levelButtonPrefab '{levelButtonPrefab.name}' has no RectTransform.");
+            Destroy(buttonObj);
+            return;
+        }
+
+        buttonRect.anchorMin = new Vector2(0.5f, 0f);
+        buttonRect.anchorMax = new Vector2(0.5f, 0f);
+        buttonRect.pivot = new Vector2(0.5f, 0.5f);
+        buttonRect.anchoredPosition = GetAnchoredPosition(buttonPos);
+        buttonRect.localScale = Vector3.one;
+
+        LevelButtonUI buttonUI = buttonObj.GetComponent<LevelButtonUI>();
+        if (buttonUI == null)
+        {
+            Debug.LogError($"LevelMapManager: Instantiated '{buttonObj.name}' is missing LevelButtonUI component.");
+            Destroy(buttonObj);
+            return;
+        }
+
+        buttonUI.Setup(levelNumber);
+
+        int currentLevel = 1;
+        if (SaveSystem.Data != null)
+        {
+            currentLevel = SaveSystem.Data.currentLevel;
+        }
+
+        if (levelNumber == currentLevel)
+        {
+            if (animateCurrentLevel)
+            {
+                CurrentLevelButtonAnimation anim = buttonObj.GetComponent<CurrentLevelButtonAnimation>();
+                if (anim == null)
+                {
+                    anim = buttonObj.AddComponent<CurrentLevelButtonAnimation>();
+                }
+                anim.pulseSpeed = currentLevelPulseSpeed;
+                anim.pulseAmount = currentLevelPulseAmount;
+            }
+
+            if (glowRingPrefab != null)
+            {
+                GameObject ringObj = Instantiate(glowRingPrefab, buttonObj.transform);
+                ringObj.name = "GlowRing";
+                ringObj.transform.SetAsFirstSibling();
+
+                RectTransform ringRect = ringObj.GetComponent<RectTransform>();
+                if (ringRect != null)
+                {
+                    ringRect.anchorMin = new Vector2(0.5f, 0.5f);
+                    ringRect.anchorMax = new Vector2(0.5f, 0.5f);
+                    ringRect.pivot = new Vector2(0.5f, 0.5f);
+                    ringRect.anchoredPosition = Vector2.zero;
+                    ringRect.localScale = Vector3.one;
+                }
+
+                GlowRingAnimation ringAnim = ringObj.GetComponent<GlowRingAnimation>();
+                if (ringAnim == null)
+                {
+                    ringAnim = ringObj.AddComponent<GlowRingAnimation>();
+                }
+                ringAnim.pulseSpeed = glowRingSpeed;
+                ringAnim.maxScaleMultiplier = glowRingMaxScale;
+                ringAnim.startAlpha = glowRingStartAlpha;
+            }
+        }
+
+        activeButtons[levelIndex] = buttonObj;
     }
 
     private void OnScrollValueChanged(Vector2 scrollPosition)
@@ -423,6 +603,7 @@ public class LevelMapManager : MonoBehaviour
             {
                 Destroy(content.GetChild(i).gameObject);
             }
+            activeButtons.Clear();
         }
 
         // Content height should cover the whole vertical span.
@@ -433,19 +614,6 @@ public class LevelMapManager : MonoBehaviour
         content.sizeDelta = size;
 
         Debug.Log($"[LevelMapManager] After Resize Height: {content.sizeDelta.y}");
-
-        // Step 1: Pre-calculate all button positions and determine the player's current level
-        int currentLevel = 1;
-        if (SaveSystem.Data != null)
-        {
-            currentLevel = SaveSystem.Data.currentLevel;
-        }
-
-        Vector2[] buttonPositions = new Vector2[totalLevels];
-        for (int levelIndex = 0; levelIndex < totalLevels; levelIndex++)
-        {
-            buttonPositions[levelIndex] = GetPositionOnCurve(levelIndex);
-        }
 
         // Step 1.5: Optional Background tiling behind everything
         if (backgroundPrefab != null)
@@ -519,92 +687,8 @@ public class LevelMapManager : MonoBehaviour
             }
         }
 
-
-
-        // Step 3: Instantiate level buttons
-        for (int levelIndex = 0; levelIndex < totalLevels; levelIndex++)
-        {
-            int levelNumber = levelIndex + 1;
-            Vector2 buttonPos = buttonPositions[levelIndex];
-
-            // Instantiate.
-            GameObject buttonObj = Instantiate(levelButtonPrefab, content);
-            buttonObj.name = $"LevelButton_{levelNumber}";
-
-            RectTransform buttonRect = buttonObj.GetComponent<RectTransform>();
-            if (buttonRect == null)
-            {
-                Debug.LogError($"LevelMapManager: levelButtonPrefab '{levelButtonPrefab.name}' has no RectTransform.");
-                continue;
-            }
-
-            // Force a predictable UI anchoring so anchoredPosition behaves consistently.
-            buttonRect.anchorMin = new Vector2(0.5f, 0f);
-            buttonRect.anchorMax = new Vector2(0.5f, 0f);
-            buttonRect.pivot = new Vector2(0.5f, 0.5f);
-
-            // Place using anchoredPosition.
-            buttonRect.anchoredPosition = GetAnchoredPosition(buttonPos);
-
-            if (levelNumber <= 5)
-            {
-                Debug.Log($"Level {levelNumber}: {buttonRect.anchoredPosition}");
-            }
-
-            // Ensure its anchors/pivot don't fight anchoredPosition.
-            buttonRect.localScale = Vector3.one;
-
-            // Preserve existing lock/unlock, stars, and click wiring.
-            LevelButtonUI buttonUI = buttonObj.GetComponent<LevelButtonUI>();
-            if (buttonUI == null)
-            {
-                Debug.LogError($"LevelMapManager: Instantiated '{buttonObj.name}' is missing LevelButtonUI component.");
-                continue;
-            }
-
-            buttonUI.Setup(levelNumber);
-
-            // Highlight current active level with a zoom in / zoom out pulse animation & glow ring
-            if (levelNumber == currentLevel)
-            {
-                if (animateCurrentLevel)
-                {
-                    CurrentLevelButtonAnimation anim = buttonObj.GetComponent<CurrentLevelButtonAnimation>();
-                    if (anim == null)
-                    {
-                        anim = buttonObj.AddComponent<CurrentLevelButtonAnimation>();
-                    }
-                    anim.pulseSpeed = currentLevelPulseSpeed;
-                    anim.pulseAmount = currentLevelPulseAmount;
-                }
-
-                if (glowRingPrefab != null)
-                {
-                    GameObject ringObj = Instantiate(glowRingPrefab, buttonObj.transform);
-                    ringObj.name = "GlowRing";
-                    ringObj.transform.SetAsFirstSibling(); // Render behind button graphics
-
-                    RectTransform ringRect = ringObj.GetComponent<RectTransform>();
-                    if (ringRect != null)
-                    {
-                        ringRect.anchorMin = new Vector2(0.5f, 0.5f);
-                        ringRect.anchorMax = new Vector2(0.5f, 0.5f);
-                        ringRect.pivot = new Vector2(0.5f, 0.5f);
-                        ringRect.anchoredPosition = Vector2.zero;
-                        ringRect.localScale = Vector3.one;
-                    }
-
-                    GlowRingAnimation ringAnim = ringObj.GetComponent<GlowRingAnimation>();
-                    if (ringAnim == null)
-                    {
-                        ringAnim = ringObj.AddComponent<GlowRingAnimation>();
-                    }
-                    ringAnim.pulseSpeed = glowRingSpeed;
-                    ringAnim.maxScaleMultiplier = glowRingMaxScale;
-                    ringAnim.startAlpha = glowRingStartAlpha;
-                }
-            }
-        }
+        // Step 3: Instantiate level buttons in the initial visible range
+        UpdateActiveButtons();
     }
 
     /// <summary>
