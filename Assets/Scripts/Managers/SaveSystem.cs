@@ -152,11 +152,11 @@ public static class SaveSystem
         // Unlock next level only (do NOT create a progress entry for it)
         if (levelNumber >= Data.highestUnlockedLevel)
         {
-            Data.highestUnlockedLevel = levelNumber + 1;
+            Data.highestUnlockedLevel = Mathf.Min(1000, levelNumber + 1);
         }
         
         // Update current level pointer
-        Data.currentLevel = levelNumber + 1;
+        Data.currentLevel = Mathf.Min(1000, levelNumber + 1);
         
         // Clear in-progress since level is complete
         ClearInProgressGame();
@@ -193,6 +193,7 @@ public static class SaveSystem
     /// </summary>
     public static bool IsLevelUnlocked(int levelNumber)
     {
+        if (levelNumber > 1000) return false;
         return levelNumber <= Data.highestUnlockedLevel;
     }
     
@@ -324,8 +325,8 @@ public static class SaveSystem
     /// </summary>
     public static void UnlockAllLevels(int maxLevel)
     {
-        Data.highestUnlockedLevel = Mathf.Max(1, maxLevel);
-        Data.currentLevel = Mathf.Max(Data.currentLevel, 1);
+        Data.highestUnlockedLevel = Mathf.Clamp(maxLevel, 1, 1000);
+        Data.currentLevel = Mathf.Clamp(Data.currentLevel, 1, 1000);
         Save();
     }
 }

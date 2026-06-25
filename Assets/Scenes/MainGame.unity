@@ -10638,7 +10638,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 10.650001
+  orthographic size: 12.984615
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -73171,25 +73171,6 @@ MonoBehaviour:
   levelButtonPrefab: {fileID: 847036519616048543, guid: 74e664e165936314eaa789206b83061e, type: 3}
   currentLevelTargetButton: {fileID: 178477211}
   totalLevels: 200
-  pathDotPrefab: {fileID: 7935628571001095743, guid: 041e42421b5da8f4facaea2bfe9641a8, type: 3}
-  dotSpacing: 70
-  unlockedPathColor: {r: 1, g: 1, b: 1, a: 1}
-  lockedPathColor: {r: 1, g: 0, b: 0, a: 0.7058824}
-  dotRotationOffset: 0
-  dotScalePattern:
-  - 1.2
-  - 0.8
-  - 0.8
-  rotateToPathDirection: 1
-  useRandomRotation: 0
-  minRandomRotation: -15
-  maxRandomRotation: 15
-  useRandomFlip: 0
-  scatterAmount: 0
-  enableWaveAnimation: 1
-  waveSpeed: 4
-  waveAmount: 0.12
-  waveSpacingDelay: 0.25
   animateCurrentLevel: 1
   currentLevelPulseSpeed: 3
   currentLevelPulseAmount: 0.12

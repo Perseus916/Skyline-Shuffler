@@ -68,8 +68,8 @@ public class GameManager : MonoBehaviour
         }
         Instance = this;
 
-        if (totalLevelsAvailable < proceduralEndLevel)
-            totalLevelsAvailable = proceduralEndLevel;
+        totalLevelsAvailable = 1000;
+        proceduralEndLevel = 1000;
         
         // Load save data
         SaveSystem.Load();
@@ -176,7 +176,7 @@ public class GameManager : MonoBehaviour
     /// </summary>
     private LevelDataSO LoadLevelData(int levelNumber)
     {
-        if (levelNumber <= 0) return null;
+        if (levelNumber <= 0 || levelNumber > 1000) return null;
 
         string path = $"{levelResourcePath}{levelNumber}";
         LevelDataSO data = Resources.Load<LevelDataSO>(path);
@@ -662,6 +662,12 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void PlayLevel(int levelNumber)
     {
+        if (levelNumber > 1000)
+        {
+            Debug.LogWarning("Cannot play level beyond 1000!");
+            ShowLevelSelect();
+            return;
+        }
         EnsureTransitionUI();
         StartCoroutine(TransitionToLevelRoutine(levelNumber));
     }
@@ -676,6 +682,10 @@ public class GameManager : MonoBehaviour
         SaveSystem.ClearInProgressGame();
         
         int level = Mathf.Max(1, SaveSystem.Data.currentLevel);
+        if (level > 1000)
+        {
+            level = 1000;
+        }
         PlayLevel(level);
     }
 
@@ -709,7 +719,7 @@ public class GameManager : MonoBehaviour
         int nextLevel = SelectedLevel + 1;
         
         // Check if next level exists
-        if (LoadLevelData(nextLevel) == null)
+        if (nextLevel > 1000 || LoadLevelData(nextLevel) == null)
         {
             Debug.Log("<color=green>No more levels!</color>");
             ShowLevelSelect();

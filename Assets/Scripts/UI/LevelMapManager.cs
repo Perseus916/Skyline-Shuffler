@@ -32,56 +32,7 @@ public class LevelMapManager : MonoBehaviour
     [Min(1)]
     [SerializeField] private int totalLevels = 200;
 
-    [Header("Path Settings")]
-    [Tooltip("Prefab for the path points/dots between buttons. Should contain a RectTransform and Image component.")]
-    [SerializeField] private GameObject pathDotPrefab;
 
-    [Tooltip("Distance (in pixels) between each path point/dot.")]
-    [SerializeField] private float dotSpacing = 30f;
-
-    [Tooltip("Color of the path dots leading to an unlocked level.")]
-    [SerializeField] private Color unlockedPathColor = Color.white;
-
-    [Tooltip("Color of the path dots leading to a locked level.")]
-    [SerializeField] private Color lockedPathColor = new Color(0.5f, 0.5f, 0.5f, 0.5f);
-
-    [Tooltip("Rotation offset (in degrees) for the path dots.")]
-    [SerializeField] private float dotRotationOffset = 0f;
-
-    [Tooltip("Pattern of scales for consecutive dots to create a rhythm (e.g. 1.2, 0.8, 0.8). Leave empty for constant scale.")]
-    [SerializeField] private float[] dotScalePattern = new float[] { 1.2f, 0.8f, 0.8f };
-
-    [Header("Path Variety & Scatter")]
-    [Tooltip("If true, rotates the path dots to align with the winding curve's direction.")]
-    [SerializeField] private bool rotateToPathDirection = true;
-
-    [Tooltip("If true, gives each path dot a random rotation for a scattered, natural look.")]
-    [SerializeField] private bool useRandomRotation = false;
-
-    [Tooltip("Minimum random rotation angle (in degrees).")]
-    [SerializeField] private float minRandomRotation = -15f;
-
-    [Tooltip("Maximum random rotation angle (in degrees).")]
-    [SerializeField] private float maxRandomRotation = 15f;
-
-    [Tooltip("If true, randomly flips the X and Y axes of the dots to prevent repetitive texture patterns.")]
-    [SerializeField] private bool useRandomFlip = false;
-
-    [Tooltip("Adds a small random offset (in pixels) to the position of each dot to make the path look organic.")]
-    [SerializeField] private float scatterAmount = 0f;
-
-    [Header("Path Animations")]
-    [Tooltip("If true, path dots leading to/on unlocked levels will animate with a flowing wave effect.")]
-    [SerializeField] private bool enableWaveAnimation = true;
-
-    [Tooltip("Speed of the wave animation.")]
-    [SerializeField] private float waveSpeed = 4f;
-
-    [Tooltip("Amount of scaling applied by the wave (e.g. 0.12 for 12% scale change).")]
-    [SerializeField] private float waveAmount = 0.12f;
-
-    [Tooltip("Delay between adjacent dots to create the flowing wave propagation.")]
-    [SerializeField] private float waveSpacingDelay = 0.25f;
 
     [Header("Current Level Animation")]
     [Tooltip("If true, applies a zoom in/zoom out pulse animation to the player's current active level button.")]
@@ -146,6 +97,13 @@ public class LevelMapManager : MonoBehaviour
     private bool isGeneratingMore = false;
     private Coroutine scrollCoroutine;
 
+    private RectTransform[] backgroundTiles;
+    private float backgroundTileHeight = 1000f;
+    private RectTransform backgroundContainer;
+
+    private System.Collections.Generic.Dictionary<int, GameObject> activeButtons = new System.Collections.Generic.Dictionary<int, GameObject>();
+    private System.Collections.Generic.List<int> keysToRemove = new System.Collections.Generic.List<int>();
+
 
     [Header("Behavior")]
     [Tooltip("If true, clears existing children under Content before generating new buttons.")]
@@ -165,7 +123,7 @@ public class LevelMapManager : MonoBehaviour
         {
             currentLevel = SaveSystem.Data.currentLevel;
         }
-        totalLevels = Mathf.Max(200, currentLevel + 200);
+        totalLevels = Mathf.Min(1000, Mathf.Max(200, currentLevel + 200));
 
         if (currentLevelTargetButton != null)
         {
@@ -194,12 +152,226 @@ public class LevelMapManager : MonoBehaviour
         {
             scrollRect.onValueChanged.RemoveListener(OnScrollValueChanged);
         }
+
+        if (backgroundContainer != null)
+        {
+            Destroy(backgroundContainer.gameObject);
+            backgroundContainer = null;
+        }
+        backgroundTiles = null;
+
+        // Clear active buttons
+        foreach (var kvp in activeButtons)
+        {
+            if (kvp.Value != null)
+            {
+                Destroy(kvp.Value);
+            }
+        }
+        activeButtons.Clear();
+    }
+
+    private void LateUpdate()
+    {
+        UpdateBackgroundPosition();
+        UpdateActiveButtons();
+    }
+
+    private void UpdateBackgroundPosition()
+    {
+        if (backgroundTiles == null || backgroundTiles.Length == 0 || content == null) return;
+
+        float scrolledDistance = -content.anchoredPosition.y;
+        float spacing = backgroundTileSpacing > 0f ? backgroundTileSpacing : backgroundTileHeight;
+        float offset = LoopModulo(scrolledDistance, spacing);
+
+        for (int i = 0; i < backgroundTiles.Length; i++)
+        {
+            if (backgroundTiles[i] != null)
+            {
+                backgroundTiles[i].anchoredPosition = new Vector2(0f, i * spacing - offset);
+            }
+        }
+    }
+
+    private float LoopModulo(float val, float m)
+    {
+        float r = val % m;
+        return r < 0 ? r + m : r;
+    }
+
+    private void GetVisibleLevelRange(out int startLevelIndex, out int endLevelIndex)
+    {
+        ScrollRect scrollRect = content != null ? content.GetComponentInParent<ScrollRect>() : null;
+        RectTransform viewport = null;
+        if (scrollRect != null)
+        {
+            viewport = scrollRect.viewport;
+            if (viewport == null)
+            {
+                viewport = scrollRect.GetComponent<RectTransform>();
+            }
+        }
+        float viewportHeight = viewport != null ? viewport.rect.height : 2000f;
+        if (viewportHeight <= 0f) viewportHeight = 2000f;
+
+        float minVisibleY = -content.anchoredPosition.y;
+        float maxVisibleY = minVisibleY + viewportHeight;
+
+        // Find the first index where anchoredY is near or above minVisibleY
+        startLevelIndex = 0;
+        for (int i = 0; i < totalLevels; i++)
+        {
+            float anchoredY = GetAnchoredPosition(GetLevelPosition(i)).y;
+            if (anchoredY >= minVisibleY)
+            {
+                startLevelIndex = i;
+                break;
+            }
+        }
+
+        // Apply a buffer of 5 buttons below
+        startLevelIndex = Mathf.Max(0, startLevelIndex - 5);
+
+        // Find the last index where anchoredY is near or below maxVisibleY
+        endLevelIndex = totalLevels - 1;
+        for (int i = startLevelIndex; i < totalLevels; i++)
+        {
+            float anchoredY = GetAnchoredPosition(GetLevelPosition(i)).y;
+            if (anchoredY > maxVisibleY)
+            {
+                endLevelIndex = i;
+                break;
+            }
+        }
+
+        // Apply a buffer of 5 buttons above
+        endLevelIndex = Mathf.Min(totalLevels - 1, endLevelIndex + 5);
+    }
+
+    private void UpdateActiveButtons()
+    {
+        if (content == null || levelButtonPrefab == null) return;
+
+        int startIdx, endIdx;
+        GetVisibleLevelRange(out startIdx, out endIdx);
+
+        // 1. Destroy and remove buttons outside the new visible range
+        keysToRemove.Clear();
+        foreach (var kvp in activeButtons)
+        {
+            int idx = kvp.Key;
+            if (idx < startIdx || idx > endIdx)
+            {
+                if (kvp.Value != null)
+                {
+                    Destroy(kvp.Value);
+                }
+                keysToRemove.Add(idx);
+            }
+        }
+        for (int i = 0; i < keysToRemove.Count; i++)
+        {
+            activeButtons.Remove(keysToRemove[i]);
+        }
+
+        // 2. Instantiate and setup buttons inside the new visible range
+        for (int i = startIdx; i <= endIdx; i++)
+        {
+            if (!activeButtons.ContainsKey(i))
+            {
+                InstantiateButton(i);
+            }
+        }
+    }
+
+    private void InstantiateButton(int levelIndex)
+    {
+        int levelNumber = levelIndex + 1;
+        Vector2 buttonPos = GetPositionOnCurve(levelIndex);
+
+        GameObject buttonObj = Instantiate(levelButtonPrefab, content);
+        buttonObj.name = $"LevelButton_{levelNumber}";
+
+        RectTransform buttonRect = buttonObj.GetComponent<RectTransform>();
+        if (buttonRect == null)
+        {
+            Debug.LogError($"LevelMapManager: levelButtonPrefab '{levelButtonPrefab.name}' has no RectTransform.");
+            Destroy(buttonObj);
+            return;
+        }
+
+        buttonRect.anchorMin = new Vector2(0.5f, 0f);
+        buttonRect.anchorMax = new Vector2(0.5f, 0f);
+        buttonRect.pivot = new Vector2(0.5f, 0.5f);
+        buttonRect.anchoredPosition = GetAnchoredPosition(buttonPos);
+        buttonRect.localScale = Vector3.one;
+
+        LevelButtonUI buttonUI = buttonObj.GetComponent<LevelButtonUI>();
+        if (buttonUI == null)
+        {
+            Debug.LogError($"LevelMapManager: Instantiated '{buttonObj.name}' is missing LevelButtonUI component.");
+            Destroy(buttonObj);
+            return;
+        }
+
+        buttonUI.Setup(levelNumber);
+
+        int currentLevel = 1;
+        if (SaveSystem.Data != null)
+        {
+            currentLevel = SaveSystem.Data.currentLevel;
+        }
+
+        if (levelNumber == currentLevel)
+        {
+            if (animateCurrentLevel)
+            {
+                CurrentLevelButtonAnimation anim = buttonObj.GetComponent<CurrentLevelButtonAnimation>();
+                if (anim == null)
+                {
+                    anim = buttonObj.AddComponent<CurrentLevelButtonAnimation>();
+                }
+                anim.pulseSpeed = currentLevelPulseSpeed;
+                anim.pulseAmount = currentLevelPulseAmount;
+            }
+
+            if (glowRingPrefab != null)
+            {
+                GameObject ringObj = Instantiate(glowRingPrefab, buttonObj.transform);
+                ringObj.name = "GlowRing";
+                ringObj.transform.SetAsFirstSibling();
+
+                RectTransform ringRect = ringObj.GetComponent<RectTransform>();
+                if (ringRect != null)
+                {
+                    ringRect.anchorMin = new Vector2(0.5f, 0.5f);
+                    ringRect.anchorMax = new Vector2(0.5f, 0.5f);
+                    ringRect.pivot = new Vector2(0.5f, 0.5f);
+                    ringRect.anchoredPosition = Vector2.zero;
+                    ringRect.localScale = Vector3.one;
+                }
+
+                GlowRingAnimation ringAnim = ringObj.GetComponent<GlowRingAnimation>();
+                if (ringAnim == null)
+                {
+                    ringAnim = ringObj.AddComponent<GlowRingAnimation>();
+                }
+                ringAnim.pulseSpeed = glowRingSpeed;
+                ringAnim.maxScaleMultiplier = glowRingMaxScale;
+                ringAnim.startAlpha = glowRingStartAlpha;
+            }
+        }
+
+        activeButtons[levelIndex] = buttonObj;
     }
 
     private void OnScrollValueChanged(Vector2 scrollPosition)
     {
         ScrollRect scrollRect = content != null ? content.GetComponentInParent<ScrollRect>() : null;
         if (scrollRect == null) return;
+
+        if (totalLevels >= 1000) return;
 
         // If the user scrolls near the top (e.g. verticalNormalizedPosition > 0.85f), generate more levels
         if (scrollRect.verticalNormalizedPosition > 0.85f)
@@ -213,13 +385,18 @@ public class LevelMapManager : MonoBehaviour
 
     private IEnumerator GenerateMoreLevelsRoutine()
     {
+        if (totalLevels >= 1000)
+        {
+            isGeneratingMore = false;
+            yield break;
+        }
         isGeneratingMore = true;
 
         // Save scroll position relative to bottom of content
         Vector2 savedAnchoredPosition = content.anchoredPosition;
 
         // Append 200 levels
-        totalLevels += 200;
+        totalLevels = Mathf.Min(1000, totalLevels + 200);
 
         // Regenerate level map
         Regenerate();
@@ -403,6 +580,11 @@ public class LevelMapManager : MonoBehaviour
             return;
         }
 
+        if (totalLevels > 1000)
+        {
+            totalLevels = 1000;
+        }
+
         if (totalLevels < 1)
         {
             Debug.LogError("LevelMapManager: totalLevels must be >= 1.");
@@ -421,6 +603,7 @@ public class LevelMapManager : MonoBehaviour
             {
                 Destroy(content.GetChild(i).gameObject);
             }
+            activeButtons.Clear();
         }
 
         // Content height should cover the whole vertical span.
@@ -432,260 +615,80 @@ public class LevelMapManager : MonoBehaviour
 
         Debug.Log($"[LevelMapManager] After Resize Height: {content.sizeDelta.y}");
 
-        // Step 1: Pre-calculate all button positions and determine the player's current level
-        int currentLevel = 1;
-        if (SaveSystem.Data != null)
-        {
-            currentLevel = SaveSystem.Data.currentLevel;
-        }
-
-        Vector2[] buttonPositions = new Vector2[totalLevels];
-        for (int levelIndex = 0; levelIndex < totalLevels; levelIndex++)
-        {
-            buttonPositions[levelIndex] = GetPositionOnCurve(levelIndex);
-        }
-
         // Step 1.5: Optional Background tiling behind everything
         if (backgroundPrefab != null)
         {
-            GameObject bgContainer = new GameObject("BackgroundContainer", typeof(RectTransform));
-            RectTransform bgContainerRect = bgContainer.GetComponent<RectTransform>();
-            bgContainerRect.SetParent(content, false);
-            bgContainerRect.anchorMin = Vector2.zero;
-            bgContainerRect.anchorMax = Vector2.one;
-            bgContainerRect.sizeDelta = Vector2.zero;
-            bgContainerRect.anchoredPosition = Vector2.zero;
-            bgContainerRect.localScale = Vector3.one;
-            bgContainerRect.SetAsFirstSibling(); // ensure background is behind other UI
-
-            RectTransform prefabRect = backgroundPrefab.GetComponent<RectTransform>();
-            float tileHeight = (prefabRect != null && prefabRect.rect.height > 0f) ? prefabRect.rect.height : 1000f;
-            float spacing = backgroundTileSpacing > 0f ? backgroundTileSpacing : tileHeight;
-
-            // Start at bottom (0) and tile upwards
-            float bottomY = 0f;
-            float topY = contentHeight;
-
-            int idx = 0;
-            // Place tiles from bottom to top, inclusive
-            for (float y = bottomY; y < topY + spacing; y += spacing)
+            ScrollRect scrollRect = content != null ? content.GetComponentInParent<ScrollRect>() : null;
+            Transform parentForBg = null;
+            if (scrollRect != null)
             {
-                GameObject bg = Instantiate(backgroundPrefab, bgContainerRect);
-                bg.name = $"Background_{idx}";
-
-                RectTransform r = bg.GetComponent<RectTransform>();
-                if (r != null)
+                parentForBg = scrollRect.viewport;
+                if (parentForBg == null)
                 {
-                    // Anchor to bottom-center so y positions align with our bottom-anchored coordinate system
-                    r.anchorMin = new Vector2(0.5f, 0f);
-                    r.anchorMax = new Vector2(0.5f, 0f);
-                    r.pivot = new Vector2(0.5f, 0f);
-                    r.anchoredPosition = new Vector2(0f, y);
-                    r.localScale = Vector3.one;
+                    parentForBg = scrollRect.transform;
                 }
-                idx++;
+            }
+            else if (content != null)
+            {
+                parentForBg = content.parent;
+            }
+
+            if (parentForBg != null)
+            {
+                // Clean up any existing background container under the parent
+                Transform existingBg = parentForBg.Find("BackgroundContainer");
+                if (existingBg != null)
+                {
+                    DestroyImmediate(existingBg.gameObject);
+                }
+
+                GameObject bgContainer = new GameObject("BackgroundContainer", typeof(RectTransform));
+                backgroundContainer = bgContainer.GetComponent<RectTransform>();
+                backgroundContainer.SetParent(parentForBg, false);
+                backgroundContainer.anchorMin = Vector2.zero;
+                backgroundContainer.anchorMax = Vector2.one;
+                backgroundContainer.sizeDelta = Vector2.zero;
+                backgroundContainer.anchoredPosition = Vector2.zero;
+                backgroundContainer.localScale = Vector3.one;
+                backgroundContainer.SetAsFirstSibling(); // ensure background is behind other UI
+
+                RectTransform prefabRect = backgroundPrefab.GetComponent<RectTransform>();
+                backgroundTileHeight = (prefabRect != null && prefabRect.rect.height > 0f) ? prefabRect.rect.height : 1000f;
+                float spacing = backgroundTileSpacing > 0f ? backgroundTileSpacing : backgroundTileHeight;
+
+                // Determine viewport height to know how many tiles to spawn
+                RectTransform parentRect = parentForBg.GetComponent<RectTransform>();
+                float viewportHeight = parentRect != null ? parentRect.rect.height : 2000f;
+                if (viewportHeight <= 0f) viewportHeight = 2000f; // safe fallback
+
+                int tilesNeeded = Mathf.CeilToInt(viewportHeight / spacing) + 1;
+                tilesNeeded = Mathf.Max(3, tilesNeeded); // Ensure at least 3 tiles for safety
+
+                backgroundTiles = new RectTransform[tilesNeeded];
+
+                for (int i = 0; i < tilesNeeded; i++)
+                {
+                    GameObject bg = Instantiate(backgroundPrefab, backgroundContainer);
+                    bg.name = $"Background_{i}";
+
+                    RectTransform r = bg.GetComponent<RectTransform>();
+                    if (r != null)
+                    {
+                        r.anchorMin = new Vector2(0.5f, 0f);
+                        r.anchorMax = new Vector2(0.5f, 0f);
+                        r.pivot = new Vector2(0.5f, 0f);
+                        r.sizeDelta = new Vector2(prefabRect != null ? prefabRect.sizeDelta.x : r.sizeDelta.x, spacing);
+                        r.localScale = Vector3.one;
+                        backgroundTiles[i] = r;
+                    }
+                }
+
+                UpdateBackgroundPosition();
             }
         }
 
-        // Step 2: Instantiate path dots along the winding curve
-        if (pathDotPrefab != null)
-        {
-            GameObject pathContainer = new GameObject("PathContainer", typeof(RectTransform));
-            RectTransform pathContainerRect = pathContainer.GetComponent<RectTransform>();
-            pathContainerRect.SetParent(content, false);
-            pathContainerRect.anchorMin = Vector2.zero;
-            pathContainerRect.anchorMax = Vector2.one;
-            pathContainerRect.sizeDelta = Vector2.zero;
-            pathContainerRect.anchoredPosition = Vector2.zero;
-            pathContainerRect.localScale = Vector3.one;
-            pathContainerRect.SetAsFirstSibling(); // Draw in the background
-
-            float t = 0f;
-            Vector2 currentPos = GetPositionOnCurve(t);
-            int dotCount = 0;
-
-            while (t < totalLevels - 1)
-            {
-                // Calculate the speed along the curve to step by a constant distance: ds/dt = speed
-                float dt_epsilon = 0.01f;
-                Vector2 pCurrent = GetPositionOnCurve(t);
-                Vector2 pNext = GetPositionOnCurve(t + dt_epsilon);
-                float dx = (pNext.x - pCurrent.x) / dt_epsilon;
-                float dy = (pNext.y - pCurrent.y) / dt_epsilon;
-                float speed = Mathf.Sqrt(dx * dx + dy * dy);
-
-                // If speed is zero (should not happen), fallback to spacing
-                float dt = speed > 0.001f ? (dotSpacing / speed) : 0.1f;
-                t += dt;
-
-                if (t > totalLevels - 1) break;
-
-                Vector2 nextPos = GetPositionOnCurve(t);
-                Vector2 dir = (nextPos - currentPos).normalized;
-                float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
-
-                // Apply scatter offset if configured
-                Vector2 finalPos = nextPos;
-                if (scatterAmount > 0f)
-                {
-                    float scatterX = Random.Range(-scatterAmount, scatterAmount);
-                    float scatterY = Random.Range(-scatterAmount, scatterAmount);
-                    finalPos += new Vector2(scatterX, scatterY);
-                }
-
-                // Instantiate dot
-                GameObject dotObj = Instantiate(pathDotPrefab, pathContainerRect);
-                dotObj.name = $"PathDot_{dotCount}";
-
-                RectTransform dotRect = dotObj.GetComponent<RectTransform>();
-                if (dotRect != null)
-                {
-                    dotRect.anchorMin = new Vector2(0.5f, 0f);
-                    dotRect.anchorMax = new Vector2(0.5f, 0f);
-                    dotRect.pivot = new Vector2(0.5f, 0.5f);
-                    dotRect.anchoredPosition = GetAnchoredPosition(finalPos);
-
-                    // Determine rotation
-                    float finalAngle = rotateToPathDirection ? (angle + dotRotationOffset) : dotRotationOffset;
-                    if (useRandomRotation)
-                    {
-                        finalAngle += Random.Range(minRandomRotation, maxRandomRotation);
-                    }
-                    dotRect.localRotation = Quaternion.Euler(0, 0, finalAngle);
-                }
-
-                // Apply size/scale patterns if configured
-                float baseScaleMultiplier = 1f;
-                if (dotScalePattern != null && dotScalePattern.Length > 0)
-                {
-                    baseScaleMultiplier = dotScalePattern[dotCount % dotScalePattern.Length];
-                }
-                Vector3 baseScale = Vector3.one * baseScaleMultiplier;
-
-                // Apply random flip if configured
-                if (useRandomFlip)
-                {
-                    float flipX = Random.value > 0.5f ? 1f : -1f;
-                    float flipY = Random.value > 0.5f ? 1f : -1f;
-                    baseScale.x *= flipX;
-                    baseScale.y *= flipY;
-                }
-
-                if (dotRect != null)
-                {
-                    dotRect.localScale = baseScale;
-                }
-
-                // Determine if this path point is unlocked
-                int leadingLevel = Mathf.CeilToInt(t + 1);
-                bool isUnlocked = leadingLevel <= currentLevel;
-
-                Image dotImage = dotObj.GetComponent<Image>();
-                if (dotImage != null)
-                {
-                    dotImage.color = isUnlocked ? unlockedPathColor : lockedPathColor;
-                }
-
-                // Set up wave animation
-                if (enableWaveAnimation)
-                {
-                    PathDotUI anim = dotObj.GetComponent<PathDotUI>();
-                    if (anim == null)
-                    {
-                        anim = dotObj.AddComponent<PathDotUI>();
-                    }
-                    anim.SetupAnimation(isUnlocked, waveSpeed, waveAmount, dotCount * waveSpacingDelay, baseScale);
-                }
-
-                currentPos = nextPos;
-                dotCount++;
-            }
-        }
-
-        // Step 3: Instantiate level buttons
-        for (int levelIndex = 0; levelIndex < totalLevels; levelIndex++)
-        {
-            int levelNumber = levelIndex + 1;
-            Vector2 buttonPos = buttonPositions[levelIndex];
-
-            // Instantiate.
-            GameObject buttonObj = Instantiate(levelButtonPrefab, content);
-            buttonObj.name = $"LevelButton_{levelNumber}";
-
-            RectTransform buttonRect = buttonObj.GetComponent<RectTransform>();
-            if (buttonRect == null)
-            {
-                Debug.LogError($"LevelMapManager: levelButtonPrefab '{levelButtonPrefab.name}' has no RectTransform.");
-                continue;
-            }
-
-            // Force a predictable UI anchoring so anchoredPosition behaves consistently.
-            buttonRect.anchorMin = new Vector2(0.5f, 0f);
-            buttonRect.anchorMax = new Vector2(0.5f, 0f);
-            buttonRect.pivot = new Vector2(0.5f, 0.5f);
-
-            // Place using anchoredPosition.
-            buttonRect.anchoredPosition = GetAnchoredPosition(buttonPos);
-
-            if (levelNumber <= 5)
-            {
-                Debug.Log($"Level {levelNumber}: {buttonRect.anchoredPosition}");
-            }
-
-            // Ensure its anchors/pivot don't fight anchoredPosition.
-            buttonRect.localScale = Vector3.one;
-
-            // Preserve existing lock/unlock, stars, and click wiring.
-            LevelButtonUI buttonUI = buttonObj.GetComponent<LevelButtonUI>();
-            if (buttonUI == null)
-            {
-                Debug.LogError($"LevelMapManager: Instantiated '{buttonObj.name}' is missing LevelButtonUI component.");
-                continue;
-            }
-
-            buttonUI.Setup(levelNumber);
-
-            // Highlight current active level with a zoom in / zoom out pulse animation & glow ring
-            if (levelNumber == currentLevel)
-            {
-                if (animateCurrentLevel)
-                {
-                    CurrentLevelButtonAnimation anim = buttonObj.GetComponent<CurrentLevelButtonAnimation>();
-                    if (anim == null)
-                    {
-                        anim = buttonObj.AddComponent<CurrentLevelButtonAnimation>();
-                    }
-                    anim.pulseSpeed = currentLevelPulseSpeed;
-                    anim.pulseAmount = currentLevelPulseAmount;
-                }
-
-                if (glowRingPrefab != null)
-                {
-                    GameObject ringObj = Instantiate(glowRingPrefab, buttonObj.transform);
-                    ringObj.name = "GlowRing";
-                    ringObj.transform.SetAsFirstSibling(); // Render behind button graphics
-
-                    RectTransform ringRect = ringObj.GetComponent<RectTransform>();
-                    if (ringRect != null)
-                    {
-                        ringRect.anchorMin = new Vector2(0.5f, 0.5f);
-                        ringRect.anchorMax = new Vector2(0.5f, 0.5f);
-                        ringRect.pivot = new Vector2(0.5f, 0.5f);
-                        ringRect.anchoredPosition = Vector2.zero;
-                        ringRect.localScale = Vector3.one;
-                    }
-
-                    GlowRingAnimation ringAnim = ringObj.GetComponent<GlowRingAnimation>();
-                    if (ringAnim == null)
-                    {
-                        ringAnim = ringObj.AddComponent<GlowRingAnimation>();
-                    }
-                    ringAnim.pulseSpeed = glowRingSpeed;
-                    ringAnim.maxScaleMultiplier = glowRingMaxScale;
-                    ringAnim.startAlpha = glowRingStartAlpha;
-                }
-            }
-        }
+        // Step 3: Instantiate level buttons in the initial visible range
+        UpdateActiveButtons();
     }
 
     /// <summary>
