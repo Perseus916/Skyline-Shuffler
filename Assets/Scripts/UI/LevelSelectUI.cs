@@ -9,26 +9,40 @@ using System.Collections;
 public class LevelSelectUI : MonoBehaviour
 {
     [Header("References")]
-    [SerializeField] private Transform levelButtonContainer;
-    [SerializeField] private GameObject levelButtonPrefab;
     [SerializeField] private Button backButton;
     
     [Header("Display")]
     [SerializeField] private TextMeshProUGUI totalStarsText;
     [SerializeField] private TextMeshProUGUI totalCoinsText;
 
+    [Header("Transitions")]
+    [Tooltip("Duration of the fade-in transition when opening the level selection screen.")]
+    [SerializeField] private float openTransitionDuration = 0.25f;
+
+    [Tooltip("Duration of the fade-out transition when closing the level selection screen.")]
+    [SerializeField] private float closeTransitionDuration = 0.2f;
+
     [Header("Locked Level Popup Panel")]
     [SerializeField] private GameObject lockedLevelPanel;
     [SerializeField] private TextMeshProUGUI lockedLevelText;
     
     private Coroutine openAnimationCoroutine;
+    private CanvasGroup canvasGroup;
+
+    private void Awake()
+    {
+        canvasGroup = GetComponent<CanvasGroup>();
+        if (canvasGroup == null)
+        {
+            canvasGroup = gameObject.AddComponent<CanvasGroup>();
+        }
+    }
 
     private void OnEnable()
     {
         backButton?.onClick.RemoveAllListeners();
         backButton?.onClick.AddListener(OnBackClicked);
         
-        PopulateLevelButtons();
         UpdateStarsDisplay();
         UpdateCoinsDisplay();
 
@@ -46,30 +60,7 @@ public class LevelSelectUI : MonoBehaviour
         UpdateCoinsDisplay();
     }
     
-    private void PopulateLevelButtons()
-    {
-        if (levelButtonPrefab == null || levelButtonContainer == null)
-        {
-            Debug.LogError("LevelSelectUI: Missing prefab or container!");
-            return;
-        }
-        
-        // Clear existing buttons
-        foreach (Transform child in levelButtonContainer)
-            Destroy(child.gameObject);
-        
-        int totalLevels = GameManager.Instance != null 
-            ? GameManager.Instance.TotalLevels 
-            : 0;
-            
-        for (int i = 1; i <= totalLevels; i++)
-        {
-            GameObject buttonObj = Instantiate(levelButtonPrefab, levelButtonContainer);
-            LevelButtonUI buttonUI = buttonObj.GetComponent<LevelButtonUI>();
-            if (buttonUI != null)
-                buttonUI.Setup(i);
-        }
-    }
+
     
     private void UpdateStarsDisplay()
     {
@@ -100,56 +91,73 @@ public class LevelSelectUI : MonoBehaviour
 
     private IEnumerator AnimateOpen()
     {
-        float duration = 0.3f;
+        float duration = openTransitionDuration;
         float elapsed = 0f;
-        Transform panelTransform = this.transform;
-        panelTransform.localScale = Vector3.zero;
+
+        // Reset scale so the panel remains standard size at all times
+        this.transform.localScale = Vector3.one;
+
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 0f;
+            canvasGroup.blocksRaycasts = false;
+        }
 
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
             float percent = Mathf.Clamp01(elapsed / duration);
 
-            // Overshoot bounce easing
-            float s = 1.3f; 
-            float p = percent - 1f;
-            float t = p * p * ((s + 1f) * p + s) + 1f;
-
-            panelTransform.localScale = Vector3.LerpUnclamped(Vector3.zero, Vector3.one, t);
+            if (canvasGroup != null)
+            {
+                canvasGroup.alpha = percent;
+            }
             yield return null;
         }
 
-        panelTransform.localScale = Vector3.one;
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 1f;
+            canvasGroup.blocksRaycasts = true;
+        }
         openAnimationCoroutine = null;
     }
 
     private IEnumerator AnimateClose()
     {
-        float duration = 0.2f;
+        float duration = closeTransitionDuration;
         float elapsed = 0f;
-        Transform panelTransform = this.transform;
-        Vector3 startScale = panelTransform.localScale;
+
+        if (canvasGroup != null)
+        {
+            canvasGroup.blocksRaycasts = false;
+        }
+
+        float startAlpha = canvasGroup != null ? canvasGroup.alpha : 1f;
 
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
             float percent = Mathf.Clamp01(elapsed / duration);
 
-            // Ease in scale down
-            float t = percent * percent;
-
-            panelTransform.localScale = Vector3.Lerp(startScale, Vector3.zero, t);
+            if (canvasGroup != null)
+            {
+                canvasGroup.alpha = Mathf.Lerp(startAlpha, 0f, percent);
+            }
             yield return null;
         }
 
-        panelTransform.localScale = Vector3.zero;
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 0f;
+        }
         
         if (GameManager.Instance != null)
             GameManager.Instance.ShowHomeScreen();
     }
     
     /// <summary>
-    /// Called by LevelButtonUI when a level is selected. Plays a scale-down closing animation first.
+    /// Called by LevelButtonUI when a level is selected. Plays a closing fade animation first.
     /// </summary>
     public void OnLevelSelected(int levelNumber)
     {
@@ -168,24 +176,32 @@ public class LevelSelectUI : MonoBehaviour
 
     private IEnumerator AnimateCloseAndPlay(int levelNumber)
     {
-        float duration = 0.2f;
+        float duration = closeTransitionDuration;
         float elapsed = 0f;
-        Transform panelTransform = this.transform;
-        Vector3 startScale = panelTransform.localScale;
+
+        if (canvasGroup != null)
+        {
+            canvasGroup.blocksRaycasts = false;
+        }
+
+        float startAlpha = canvasGroup != null ? canvasGroup.alpha : 1f;
 
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
             float percent = Mathf.Clamp01(elapsed / duration);
 
-            // Ease in scale down
-            float t = percent * percent;
-
-            panelTransform.localScale = Vector3.Lerp(startScale, Vector3.zero, t);
+            if (canvasGroup != null)
+            {
+                canvasGroup.alpha = Mathf.Lerp(startAlpha, 0f, percent);
+            }
             yield return null;
         }
 
-        panelTransform.localScale = Vector3.zero;
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 0f;
+        }
 
         if (GameManager.Instance != null)
             GameManager.Instance.PlayLevel(levelNumber);
