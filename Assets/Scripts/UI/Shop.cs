@@ -187,10 +187,11 @@ public class ShopManager : MonoBehaviour
         bool spent = SaveSystem.SpendCoins(coinCost);
         if (!spent) return;
 
-        // Play coin spend sound & trigger haptics
+        // Play coin spend sound, achievement sound & trigger haptics
         if (AudioManager.Instance != null)
         {
             AudioManager.Instance.PlayCoinSpend();
+            AudioManager.Instance.PlayAchievement();
         }
 
         // Grant consumables (shop-only policy).

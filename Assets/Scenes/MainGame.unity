@@ -631,8 +631,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 1}
   m_AnchorMax: {x: 0.5, y: 1}
-  m_AnchoredPosition: {x: 0, y: -120.33948}
-  m_SizeDelta: {x: 625.7888, y: 240.679}
+  m_AnchoredPosition: {x: 0.000015258789, y: -120.33948}
+  m_SizeDelta: {x: 1011.1541, y: 240.679}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &28306940
 MonoBehaviour:
@@ -681,7 +681,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 127.35
+  m_fontSize: 128
   m_fontSizeBase: 24
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -24624,13 +24624,14 @@ MonoBehaviour:
   moveFailed: {fileID: 8300000, guid: c07b78c81c5c5e34b8e6fa27e431102d, type: 3}
   undoSound: {fileID: 8300000, guid: ba513d43f6fbff8469690edd8f215c51, type: 3}
   hintSound: {fileID: 8300000, guid: ba513d43f6fbff8469690edd8f215c51, type: 3}
-  buttonClick: {fileID: 8300000, guid: ba513d43f6fbff8469690edd8f215c51, type: 3}
-  buttonBack: {fileID: 8300000, guid: ba513d43f6fbff8469690edd8f215c51, type: 3}
-  popupOpen: {fileID: 0}
-  popupClose: {fileID: 0}
-  coinEarn: {fileID: 0}
-  coinSpend: {fileID: 0}
-  starEarn: {fileID: 0}
+  buttonClick: {fileID: 8300000, guid: d7618c14d7042a34ebf0a64e203b5e8c, type: 3}
+  buttonBack: {fileID: 8300000, guid: d7618c14d7042a34ebf0a64e203b5e8c, type: 3}
+  popupOpen: {fileID: 8300000, guid: afb7549d5ef6e8f4398bed941efd3fc3, type: 3}
+  popupClose: {fileID: 8300000, guid: afb7549d5ef6e8f4398bed941efd3fc3, type: 3}
+  coinEarn: {fileID: 8300000, guid: 7a30a534301d7ea4689a1da2c2bb71ed, type: 3}
+  coinSpend: {fileID: 8300000, guid: 7a30a534301d7ea4689a1da2c2bb71ed, type: 3}
+  starEarn: {fileID: 8300000, guid: f0aa76b7275a1a84398e0c4fd076f29e, type: 3}
+  achievementSound: {fileID: 0}
   lightHaptic: 10
   mediumHaptic: 25
   heavyHaptic: 50
@@ -65983,11 +65984,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 433dcc45c9a221e4ca3aa5296539b475, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LevelSelectUI
-  levelButtonContainer: {fileID: 1190742838}
-  levelButtonPrefab: {fileID: 847036519616048543, guid: 74e664e165936314eaa789206b83061e, type: 3}
   backButton: {fileID: 1706972014}
   totalStarsText: {fileID: 0}
   totalCoinsText: {fileID: 1439870673}
+  openTransitionDuration: 0.25
+  closeTransitionDuration: 0.2
   lockedLevelPanel: {fileID: 760272858}
   lockedLevelText: {fileID: 1749403984}
 --- !u!1 &1927244684
