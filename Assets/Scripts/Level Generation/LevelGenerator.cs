@@ -173,10 +173,35 @@ public class LevelGeneratorEditor : EditorWindow
         
         // Building count scales with difficulty tier
         int buildingCount = GetBuildingCount(level.tier, lvlNum);
-        
-        // All grid slots are now playable/usable (no locked slots)
-        int totalPlayableSlots = level.gridDimension * level.gridDimension;
-        int emptySlotCount = totalPlayableSlots - buildingCount;
+        int emptySlotCount;
+        int totalPlayableSlots;
+        int maxSlots = level.gridDimension * level.gridDimension;
+
+        int baseEmpty = level.gridDimension - 2;
+        emptySlotCount = (lvlNum <= config.easyEnd || level.isBreatherLevel) ? baseEmpty + 1 : baseEmpty;
+        if (emptySlotCount < 1) emptySlotCount = 1;
+
+        totalPlayableSlots = buildingCount + emptySlotCount;
+        if (totalPlayableSlots > maxSlots)
+        {
+            totalPlayableSlots = maxSlots;
+            emptySlotCount = totalPlayableSlots - buildingCount;
+            if (emptySlotCount < 1)
+            {
+                emptySlotCount = 1;
+                totalPlayableSlots = buildingCount + emptySlotCount;
+                if (totalPlayableSlots > maxSlots)
+                {
+                    buildingCount = maxSlots - 1;
+                    totalPlayableSlots = maxSlots;
+                }
+            }
+        }
+        else if (totalPlayableSlots == maxSlots && emptySlotCount > 1)
+        {
+            totalPlayableSlots = maxSlots - 1;
+            emptySlotCount = totalPlayableSlots - buildingCount;
+        }
         
         level.emptySlotCount = emptySlotCount;
         level.buildingStyleCount = Mathf.Min(buildingCount, library.allStyles.Count);
@@ -203,43 +228,64 @@ public class LevelGeneratorEditor : EditorWindow
             int filledCount = 0;
             int createdPlayable = 0;
             
-            // Iterate grid positions
-            for (int z = level.gridDimension - 1; z >= 0; z--)
+            // 1. Generate all grid coordinates and shuffle them to randomly distribute
+            // filled, empty, and locked slots across the board.
+            List<Vector2Int> gridPositions = new List<Vector2Int>();
+            for (int z = 0; z < level.gridDimension; z++)
             {
                 for (int x = 0; x < level.gridDimension; x++)
                 {
-                    // Crane positions (0,2) and (1,2) are now playable empty slots
-                    // No positions are skipped — all 9 grid slots are used
+                    gridPositions.Add(new Vector2Int(x, z));
+                }
+            }
+            gridPositions = gridPositions.OrderBy(p => Random.value).ToList();
 
-                    SlotData slot = new SlotData { gridPos = new Vector2Int(x, z) };
+            // Ensure the starting crane position is always inside the playable slots range.
+            Vector2Int cranePos = new Vector2Int(0, level.gridDimension - 1);
+            if (gridPositions.Contains(cranePos))
+            {
+                int craneIdx = gridPositions.IndexOf(cranePos);
+                if (craneIdx >= totalPlayableSlots)
+                {
+                    int swapIdx = Random.Range(0, totalPlayableSlots);
+                    Vector2Int temp = gridPositions[swapIdx];
+                    gridPositions[swapIdx] = cranePos;
+                    gridPositions[craneIdx] = temp;
+                }
+            }
 
-                    if (createdPlayable < totalPlayableSlots)
+            // 2. Assign styles, emptiness, and lock status to grid slots
+            for (int i = 0; i < gridPositions.Count; i++)
+            {
+                Vector2Int pos = gridPositions[i];
+                SlotData slot = new SlotData { gridPos = pos };
+
+                if (createdPlayable < totalPlayableSlots)
+                {
+                    slot.isLocked = false;
+
+                    if (filledCount < buildingCount)
                     {
-                        slot.isLocked = false;
-
-                        if (filledCount < buildingCount)
-                        {
-                            slot.buildingStyle = shuffledStyles[filledCount % shuffledStyles.Count];
-                            // Fill with same style = SOLVED state
-                            for (int f = 0; f < stackHeight; f++)
-                                slot.floorStyles.Add(slot.buildingStyle);
-                            filledCount++;
-                        }
-                        else
-                        {
-                            slot.isEmpty = true;
-                            slot.buildingStyle = null;
-                        }
-
-                        playableSlots.Add(slot);
-                        createdPlayable++;
+                        slot.buildingStyle = shuffledStyles[filledCount % shuffledStyles.Count];
+                        // Fill with same style = SOLVED state
+                        for (int f = 0; f < stackHeight; f++)
+                            slot.floorStyles.Add(slot.buildingStyle);
+                        filledCount++;
                     }
                     else
                     {
-                        slot.isLocked = true;
+                        slot.isEmpty = true;
+                        slot.buildingStyle = null;
                     }
-                    level.slots.Add(slot);
+
+                    playableSlots.Add(slot);
+                    createdPlayable++;
                 }
+                else
+                {
+                    slot.isLocked = true;
+                }
+                level.slots.Add(slot);
             }
 
             // ═══════════════════════════════════════════════════════════
