@@ -16,118 +16,78 @@ MonoBehaviour:
   gridDimension: 3
   craneGridPos: {x: 0, y: 2}
   slots:
-  - gridPos: {x: 0, y: 2}
-    isLocked: 0
-    isEmpty: 0
-    buildingStyle: {fileID: 11400000, guid: 7e580cebe32edbf46b15ffc78d1445cc, type: 2}
-    floorStyles: []
-  - gridPos: {x: 1, y: 2}
-    isLocked: 0
-    isEmpty: 0
-    buildingStyle: {fileID: 11400000, guid: b32e9de2680bde24ba71ac7e37910d1c, type: 2}
-    floorStyles:
-    - {fileID: 11400000, guid: b32e9de2680bde24ba71ac7e37910d1c, type: 2}
-    - {fileID: 11400000, guid: b32e9de2680bde24ba71ac7e37910d1c, type: 2}
-    - {fileID: 11400000, guid: 7e580cebe32edbf46b15ffc78d1445cc, type: 2}
   - gridPos: {x: 2, y: 2}
     isLocked: 0
     isEmpty: 0
-    buildingStyle: {fileID: 11400000, guid: 976d589237c5df045869c63a8259f877, type: 2}
-    floorStyles: []
+    buildingStyle: {fileID: 11400000, guid: 09526e8f34fcf33408363ca6da763f18, type: 2}
+    floorStyles:
+    - {fileID: 11400000, guid: 09526e8f34fcf33408363ca6da763f18, type: 2}
+    - {fileID: 11400000, guid: 09526e8f34fcf33408363ca6da763f18, type: 2}
+    - {fileID: 11400000, guid: 7e580cebe32edbf46b15ffc78d1445cc, type: 2}
   - gridPos: {x: 0, y: 1}
     isLocked: 0
     isEmpty: 0
-    buildingStyle: {fileID: 0}
-    floorStyles: []
+    buildingStyle: {fileID: 11400000, guid: 976d589237c5df045869c63a8259f877, type: 2}
+    floorStyles:
+    - {fileID: 11400000, guid: 976d589237c5df045869c63a8259f877, type: 2}
+    - {fileID: 11400000, guid: 7e580cebe32edbf46b15ffc78d1445cc, type: 2}
+    - {fileID: 11400000, guid: 7e580cebe32edbf46b15ffc78d1445cc, type: 2}
   - gridPos: {x: 1, y: 1}
     isLocked: 0
     isEmpty: 0
-    buildingStyle: {fileID: 0}
+    buildingStyle: {fileID: 11400000, guid: 7e580cebe32edbf46b15ffc78d1445cc, type: 2}
     floorStyles:
-    - {fileID: 11400000, guid: 7e580cebe32edbf46b15ffc78d1445cc, type: 2}
     - {fileID: 11400000, guid: 976d589237c5df045869c63a8259f877, type: 2}
+    - {fileID: 11400000, guid: 976d589237c5df045869c63a8259f877, type: 2}
+    - {fileID: 11400000, guid: 09526e8f34fcf33408363ca6da763f18, type: 2}
   - gridPos: {x: 2, y: 1}
     isLocked: 0
     isEmpty: 0
     buildingStyle: {fileID: 0}
-    floorStyles:
-    - {fileID: 11400000, guid: 7e580cebe32edbf46b15ffc78d1445cc, type: 2}
-    - {fileID: 11400000, guid: b32e9de2680bde24ba71ac7e37910d1c, type: 2}
-    - {fileID: 11400000, guid: 976d589237c5df045869c63a8259f877, type: 2}
+    floorStyles: []
   - gridPos: {x: 0, y: 0}
-    isLocked: 0
+    isLocked: 1
     isEmpty: 0
     buildingStyle: {fileID: 0}
-    floorStyles:
-    - {fileID: 11400000, guid: 976d589237c5df045869c63a8259f877, type: 2}
+    floorStyles: []
   - gridPos: {x: 1, y: 0}
-    isLocked: 0
+    isLocked: 1
     isEmpty: 0
     buildingStyle: {fileID: 0}
     floorStyles: []
   - gridPos: {x: 2, y: 0}
-    isLocked: 0
+    isLocked: 1
     isEmpty: 0
     buildingStyle: {fileID: 0}
     floorStyles: []
   solvingSteps:
-  - fromGridPos: {x: 0, y: 0}
-    toGridPos: {x: 1, y: 1}
+  - fromGridPos: {x: 0, y: 1}
+    toGridPos: {x: 2, y: 1}
+  - fromGridPos: {x: 2, y: 2}
+    toGridPos: {x: 2, y: 1}
+  - fromGridPos: {x: 0, y: 1}
+    toGridPos: {x: 2, y: 1}
+  - fromGridPos: {x: 1, y: 1}
+    toGridPos: {x: 2, y: 2}
   - fromGridPos: {x: 1, y: 1}
     toGridPos: {x: 0, y: 1}
-  - fromGridPos: {x: 0, y: 1}
-    toGridPos: {x: 2, y: 0}
-  - fromGridPos: {x: 2, y: 0}
-    toGridPos: {x: 2, y: 2}
-  - fromGridPos: {x: 2, y: 2}
-    toGridPos: {x: 1, y: 1}
   - fromGridPos: {x: 1, y: 1}
-    toGridPos: {x: 2, y: 0}
-  - fromGridPos: {x: 2, y: 0}
-    toGridPos: {x: 1, y: 0}
-  - fromGridPos: {x: 1, y: 0}
-    toGridPos: {x: 0, y: 0}
-  - fromGridPos: {x: 0, y: 0}
-    toGridPos: {x: 1, y: 1}
-  - fromGridPos: {x: 1, y: 1}
-    toGridPos: {x: 2, y: 2}
-  - fromGridPos: {x: 2, y: 2}
-    toGridPos: {x: 2, y: 0}
-  - fromGridPos: {x: 2, y: 0}
-    toGridPos: {x: 0, y: 0}
-  - fromGridPos: {x: 0, y: 0}
-    toGridPos: {x: 1, y: 0}
-  - fromGridPos: {x: 1, y: 0}
-    toGridPos: {x: 2, y: 0}
-  - fromGridPos: {x: 2, y: 0}
-    toGridPos: {x: 2, y: 2}
-  - fromGridPos: {x: 1, y: 1}
-    toGridPos: {x: 2, y: 2}
-  - fromGridPos: {x: 1, y: 1}
-    toGridPos: {x: 0, y: 2}
-  - fromGridPos: {x: 2, y: 1}
-    toGridPos: {x: 2, y: 2}
-  - fromGridPos: {x: 1, y: 2}
-    toGridPos: {x: 0, y: 2}
-  - fromGridPos: {x: 0, y: 2}
-    toGridPos: {x: 1, y: 1}
-  - fromGridPos: {x: 2, y: 1}
-    toGridPos: {x: 1, y: 2}
+    toGridPos: {x: 0, y: 1}
   - fromGridPos: {x: 2, y: 1}
     toGridPos: {x: 1, y: 1}
-  - fromGridPos: {x: 1, y: 1}
-    toGridPos: {x: 0, y: 2}
-  - fromGridPos: {x: 1, y: 1}
-    toGridPos: {x: 0, y: 2}
-  optimalMoves: 24
-  playerMoveLimit: 60
+  - fromGridPos: {x: 2, y: 1}
+    toGridPos: {x: 1, y: 1}
+  - fromGridPos: {x: 2, y: 1}
+    toGridPos: {x: 1, y: 1}
+  optimalMoves: 9
+  playerMoveLimit: 25
   tier: 2
-  cognitiveComplexity: 58.5
-  maxBlockingDepth: 2
-  contaminationRatio: 0.75
+  cognitiveComplexity: 58
+  maxBlockingDepth: 1
+  contaminationRatio: 1
   perfectClearBonus: 17
   isBreatherLevel: 0
   isMilestone: 0
-  shuffleDepth: 24
-  emptySlotCount: 6
+  shuffleDepth: 9
+  emptySlotCount: 1
   buildingStyleCount: 3
