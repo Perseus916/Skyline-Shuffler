@@ -1,0 +1,150 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 57d12d55af5ab454cb702671bf99af9c, type: 3}
+  m_Name: Level_334
+  m_EditorClassIdentifier: Assembly-CSharp::LevelDataSO
+  levelNumber: 334
+  gridDimension: 3
+  craneGridPos: {x: 0, y: 2}
+  slots:
+  - gridPos: {x: 0, y: 2}
+    isLocked: 0
+    isEmpty: 0
+    buildingStyle: {fileID: 11400000, guid: 09526e8f34fcf33408363ca6da763f18, type: 2}
+    floorStyles:
+    - {fileID: 11400000, guid: 09526e8f34fcf33408363ca6da763f18, type: 2}
+    - {fileID: 11400000, guid: 09526e8f34fcf33408363ca6da763f18, type: 2}
+    - {fileID: 11400000, guid: 09526e8f34fcf33408363ca6da763f18, type: 2}
+    - {fileID: 11400000, guid: 7e580cebe32edbf46b15ffc78d1445cc, type: 2}
+    - {fileID: 11400000, guid: b32e9de2680bde24ba71ac7e37910d1c, type: 2}
+  - gridPos: {x: 1, y: 2}
+    isLocked: 0
+    isEmpty: 0
+    buildingStyle: {fileID: 11400000, guid: 976d589237c5df045869c63a8259f877, type: 2}
+    floorStyles:
+    - {fileID: 11400000, guid: 976d589237c5df045869c63a8259f877, type: 2}
+    - {fileID: 11400000, guid: 976d589237c5df045869c63a8259f877, type: 2}
+    - {fileID: 11400000, guid: 976d589237c5df045869c63a8259f877, type: 2}
+    - {fileID: 11400000, guid: 09526e8f34fcf33408363ca6da763f18, type: 2}
+    - {fileID: 11400000, guid: b32e9de2680bde24ba71ac7e37910d1c, type: 2}
+  - gridPos: {x: 2, y: 2}
+    isLocked: 0
+    isEmpty: 0
+    buildingStyle: {fileID: 11400000, guid: 7e580cebe32edbf46b15ffc78d1445cc, type: 2}
+    floorStyles:
+    - {fileID: 11400000, guid: 7e580cebe32edbf46b15ffc78d1445cc, type: 2}
+    - {fileID: 11400000, guid: 7e580cebe32edbf46b15ffc78d1445cc, type: 2}
+    - {fileID: 11400000, guid: 7e580cebe32edbf46b15ffc78d1445cc, type: 2}
+    - {fileID: 11400000, guid: 09526e8f34fcf33408363ca6da763f18, type: 2}
+    - {fileID: 11400000, guid: 976d589237c5df045869c63a8259f877, type: 2}
+  - gridPos: {x: 0, y: 1}
+    isLocked: 0
+    isEmpty: 0
+    buildingStyle: {fileID: 11400000, guid: b32e9de2680bde24ba71ac7e37910d1c, type: 2}
+    floorStyles:
+    - {fileID: 11400000, guid: b32e9de2680bde24ba71ac7e37910d1c, type: 2}
+  - gridPos: {x: 1, y: 1}
+    isLocked: 0
+    isEmpty: 0
+    buildingStyle: {fileID: 0}
+    floorStyles: []
+  - gridPos: {x: 2, y: 1}
+    isLocked: 0
+    isEmpty: 0
+    buildingStyle: {fileID: 0}
+    floorStyles:
+    - {fileID: 11400000, guid: b32e9de2680bde24ba71ac7e37910d1c, type: 2}
+  - gridPos: {x: 0, y: 0}
+    isLocked: 0
+    isEmpty: 0
+    buildingStyle: {fileID: 0}
+    floorStyles: []
+  - gridPos: {x: 1, y: 0}
+    isLocked: 0
+    isEmpty: 0
+    buildingStyle: {fileID: 0}
+    floorStyles: []
+  - gridPos: {x: 2, y: 0}
+    isLocked: 0
+    isEmpty: 0
+    buildingStyle: {fileID: 0}
+    floorStyles:
+    - {fileID: 11400000, guid: 7e580cebe32edbf46b15ffc78d1445cc, type: 2}
+    - {fileID: 11400000, guid: 976d589237c5df045869c63a8259f877, type: 2}
+    - {fileID: 11400000, guid: b32e9de2680bde24ba71ac7e37910d1c, type: 2}
+  solvingSteps:
+  - fromGridPos: {x: 2, y: 1}
+    toGridPos: {x: 1, y: 0}
+  - fromGridPos: {x: 1, y: 0}
+    toGridPos: {x: 0, y: 0}
+  - fromGridPos: {x: 0, y: 1}
+    toGridPos: {x: 1, y: 0}
+  - fromGridPos: {x: 0, y: 0}
+    toGridPos: {x: 1, y: 1}
+  - fromGridPos: {x: 1, y: 1}
+    toGridPos: {x: 1, y: 0}
+  - fromGridPos: {x: 1, y: 0}
+    toGridPos: {x: 0, y: 0}
+  - fromGridPos: {x: 0, y: 0}
+    toGridPos: {x: 0, y: 1}
+  - fromGridPos: {x: 0, y: 1}
+    toGridPos: {x: 2, y: 0}
+  - fromGridPos: {x: 2, y: 0}
+    toGridPos: {x: 1, y: 1}
+  - fromGridPos: {x: 1, y: 1}
+    toGridPos: {x: 1, y: 0}
+  - fromGridPos: {x: 1, y: 0}
+    toGridPos: {x: 2, y: 1}
+  - fromGridPos: {x: 1, y: 0}
+    toGridPos: {x: 1, y: 1}
+  - fromGridPos: {x: 2, y: 1}
+    toGridPos: {x: 2, y: 0}
+  - fromGridPos: {x: 2, y: 0}
+    toGridPos: {x: 0, y: 0}
+  - fromGridPos: {x: 1, y: 1}
+    toGridPos: {x: 0, y: 1}
+  - fromGridPos: {x: 0, y: 0}
+    toGridPos: {x: 1, y: 0}
+  - fromGridPos: {x: 1, y: 0}
+    toGridPos: {x: 0, y: 1}
+  - fromGridPos: {x: 0, y: 2}
+    toGridPos: {x: 0, y: 1}
+  - fromGridPos: {x: 2, y: 0}
+    toGridPos: {x: 0, y: 1}
+  - fromGridPos: {x: 1, y: 2}
+    toGridPos: {x: 0, y: 1}
+  - fromGridPos: {x: 0, y: 2}
+    toGridPos: {x: 1, y: 1}
+  - fromGridPos: {x: 1, y: 2}
+    toGridPos: {x: 0, y: 2}
+  - fromGridPos: {x: 2, y: 0}
+    toGridPos: {x: 1, y: 2}
+  - fromGridPos: {x: 2, y: 2}
+    toGridPos: {x: 1, y: 2}
+  - fromGridPos: {x: 2, y: 2}
+    toGridPos: {x: 0, y: 2}
+  - fromGridPos: {x: 1, y: 1}
+    toGridPos: {x: 2, y: 2}
+  - fromGridPos: {x: 2, y: 0}
+    toGridPos: {x: 2, y: 2}
+  optimalMoves: 27
+  playerMoveLimit: 70
+  tier: 4
+  cognitiveComplexity: 76
+  maxBlockingDepth: 2
+  contaminationRatio: 0.6666667
+  perfectClearBonus: 43
+  isBreatherLevel: 0
+  isMilestone: 0
+  shuffleDepth: 27
+  emptySlotCount: 5
+  buildingStyleCount: 4
