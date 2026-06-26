@@ -177,8 +177,6 @@ public class DifficultyConfigSO : ScriptableObject
     /// </summary>
     public int GetGridDimension(int level)
     {
-        if (level < gridExpansionLevel) return 3;
-        if (level < gridExpansionLevel2) return 4;
-        return 5;
+        return 3;
     }
 }
