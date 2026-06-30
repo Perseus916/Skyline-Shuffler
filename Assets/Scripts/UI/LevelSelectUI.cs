@@ -161,17 +161,11 @@ public class LevelSelectUI : MonoBehaviour
     /// </summary>
     public void OnLevelSelected(int levelNumber)
     {
-        if (gameObject.activeInHierarchy)
-        {
-            if (openAnimationCoroutine != null)
-                StopCoroutine(openAnimationCoroutine);
-            StartCoroutine(AnimateCloseAndPlay(levelNumber));
-        }
-        else
-        {
-            if (GameManager.Instance != null)
-                GameManager.Instance.PlayLevel(levelNumber);
-        }
+        if (openAnimationCoroutine != null)
+            StopCoroutine(openAnimationCoroutine);
+        // Immediately play the level, skipping fade-out
+        if (GameManager.Instance != null)
+            GameManager.Instance.PlayLevel(levelNumber);
     }
 
     private IEnumerator AnimateCloseAndPlay(int levelNumber)

@@ -62,6 +62,12 @@ public class LevelCompleteUI : MonoBehaviour
     [SerializeField] private float slideDelay       = 0.10f;
     [SerializeField] private float slideDuration    = 0.36f;
 
+    [Header("Coin Flip Animation")]
+    [Tooltip("Assign the Coin Image GameObject (with Image component) here")] 
+    [SerializeField] private Image coinImage; // The coin image to flip
+    [SerializeField] private float coinFlipDuration = 0.6f;
+    private CanvasGroup coinCanvasGroup;
+
     private int earnedStars;
     private bool isAnimating;
     private bool wasVisible; // tracks if popup was actually shown to user
@@ -82,6 +88,15 @@ public class LevelCompleteUI : MonoBehaviour
             Debug.LogWarning("[LevelCompleteUI] Next Level Button not assigned in Inspector!");
         else
             nextLevelButton.onClick.AddListener(OnNextLevel);
+
+        if (coinImage != null)
+        {
+            coinCanvasGroup = coinImage.GetComponent<CanvasGroup>();
+            if (coinCanvasGroup == null)
+                coinCanvasGroup = coinImage.gameObject.AddComponent<CanvasGroup>();
+            coinCanvasGroup.alpha = 1f;
+            coinImage.transform.localRotation = Quaternion.identity;
+        }
     }
 
     private void Start()
@@ -210,12 +225,36 @@ public class LevelCompleteUI : MonoBehaviour
             AudioManager.Instance.PlayCoinEarn();
         }
         StartCoroutine(SlideUp(coinsRect, slideDuration));
+        // --- COIN FLIP ---
+        if (coinImage != null)
+        {
+            coinImage.transform.localRotation = Quaternion.identity;
+            if (coinCanvasGroup != null) coinCanvasGroup.alpha = 1f;
+            StartCoroutine(FlipAndFadeCoin());
+        }
         yield return new WaitForSeconds(0.10f);
 
         // Phase 5 ── Buttons row slides up + fades in (slight stagger)
         StartCoroutine(SlideUp(buttonsRect, slideDuration));
 
         isAnimating = false;
+    }
+
+    private IEnumerator FlipAndFadeCoin()
+    {
+        // Flip
+        float elapsed = 0f;
+        while (elapsed < coinFlipDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / coinFlipDuration);
+            float yRot = Mathf.Lerp(0f, 360f, t);
+            coinImage.transform.localRotation = Quaternion.Euler(0f, yRot, 0f);
+            yield return null;
+        }
+        coinImage.transform.localRotation = Quaternion.identity;
+        
+      
     }
 
     // ──────────────────────────────────────────────────────────────────────
