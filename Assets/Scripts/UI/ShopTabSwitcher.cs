@@ -63,6 +63,9 @@ public class ShopTabSwitcher : MonoBehaviour
     // Drag tracking (fed by ShopTabSwipeCatcher)
     private bool isDragging;
     private float dragStartX;
+    private float lastDragX;
+    private float dragVelocity;
+    private const float flickVelocityThreshold = 800f; // pixels/second
 
     // ───────────────────── Lifecycle ─────────────────────
 
@@ -110,6 +113,49 @@ public class ShopTabSwitcher : MonoBehaviour
     {
         isDragging = true;
         dragStartX = screenX;
+        lastDragX = screenX;
+        dragVelocity = 0f;
+
+        // Stop any running slide so user takes control
+        if (slideCoroutine != null)
+        {
+            StopCoroutine(slideCoroutine);
+            slideCoroutine = null;
+        }
+    }
+
+    /// <summary>Called during the drag for real-time panel following.</summary>
+    public void OnSwipeDrag(float screenX)
+    {
+        if (!isDragging) return;
+        if (undoPanel == null || hintPanel == null) return;
+
+        // Track velocity for flick detection
+        float dt = Time.unscaledDeltaTime;
+        if (dt > 0f)
+            dragVelocity = (screenX - lastDragX) / dt;
+        lastDragX = screenX;
+
+        float delta = screenX - dragStartX;
+
+        // Apply elastic resistance at the edges (can't swipe past first/last tab)
+        if ((currentTab == ShopTab.Undo && delta > 0f) ||
+            (currentTab == ShopTab.Hint && delta < 0f))
+        {
+            delta *= 0.3f; // rubber-band effect
+        }
+
+        // Move panels with finger
+        if (currentTab == ShopTab.Undo)
+        {
+            undoPanel.anchoredPosition = new Vector2(delta, 0f);
+            hintPanel.anchoredPosition = new Vector2(panelWidth + delta, 0f);
+        }
+        else
+        {
+            undoPanel.anchoredPosition = new Vector2(-panelWidth + delta, 0f);
+            hintPanel.anchoredPosition = new Vector2(delta, 0f);
+        }
     }
 
     public void OnSwipeEnd(float screenX)
@@ -119,16 +165,29 @@ public class ShopTabSwitcher : MonoBehaviour
 
         float delta = screenX - dragStartX;
 
+        // Switch tab if swipe distance OR flick velocity exceeds threshold
+        bool shouldSwitch = false;
         if (delta < -swipeThreshold && currentTab == ShopTab.Undo)
-        {
-            // Swiped left → show Hint
-            SwitchToTab(ShopTab.Hint);
-        }
+            shouldSwitch = true;
         else if (delta > swipeThreshold && currentTab == ShopTab.Hint)
+            shouldSwitch = true;
+        // Flick detection: fast swipe even if short distance
+        else if (dragVelocity < -flickVelocityThreshold && currentTab == ShopTab.Undo)
+            shouldSwitch = true;
+        else if (dragVelocity > flickVelocityThreshold && currentTab == ShopTab.Hint)
+            shouldSwitch = true;
+
+        if (shouldSwitch)
         {
-            // Swiped right → show Undo
-            SwitchToTab(ShopTab.Undo);
+            ShopTab newTab = (currentTab == ShopTab.Undo) ? ShopTab.Hint : ShopTab.Undo;
+            currentTab = newTab;
+
+            if (AudioManager.Instance != null)
+                AudioManager.Instance.PlayButtonClick();
         }
+
+        // Animate to final position (either new tab or snap back)
+        AnimateToTab(currentTab);
     }
 
     // ───────────────────── Core switching ─────────────────────
