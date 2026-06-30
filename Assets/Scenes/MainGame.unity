@@ -94,7 +94,7 @@ LightmapSettings:
     m_TrainingDataDestination: TrainingData
     m_LightProbeSampleCountMultiplier: 4
   m_LightingDataAsset: {fileID: 20201, guid: 0000000000000000f000000000000000, type: 0}
-  m_LightingSettings: {fileID: 0}
+  m_LightingSettings: {fileID: 4890085278179872738, guid: ce8906015862b6147968981337b1cc67, type: 2}
 --- !u!196 &4
 NavMeshSettings:
   serializedVersion: 2
@@ -10545,7 +10545,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 12.981308
+  orthographic size: 10.650001
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -14817,8 +14817,8 @@ MonoBehaviour:
   - {fileID: 634019794}
   - {fileID: 302498665}
   - {fileID: 1988601250}
-  npcCount: 20
-  npcinbuilding: 5
+  npcCount: 8
+  npcinbuilding: 2
   spawnOnStart: 0
   spawnWithInterval: 1
   spawnInterval: 1
@@ -14826,7 +14826,7 @@ MonoBehaviour:
   staggerDelay: 0.05
   spawnPositionJitter: 0.5
   celebrationRadius: 15
-  enterStaggerDelay: 0.3
+  enterStaggerDelay: 0.00001
 --- !u!4 &617919051
 Transform:
   m_ObjectHideFlags: 0
@@ -43683,7 +43683,7 @@ GameObject:
   - component: {fileID: 1158318990}
   - component: {fileID: 1158318989}
   m_Layer: 5
-  m_Name: Image
+  m_Name: coin
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -44608,6 +44608,8 @@ MonoBehaviour:
   starInterval: 0.2
   slideDelay: 0.12
   slideDuration: 0.38
+  coinImage: {fileID: 1158318989}
+  coinFlipDuration: 0.6
 --- !u!225 &1223005228
 CanvasGroup:
   m_ObjectHideFlags: 0
@@ -65357,7 +65359,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
   m_AnchoredPosition: {x: 372.5, y: -59.99999}
-  m_SizeDelta: {x: 0, y: 120}
+  m_SizeDelta: {x: 347.93, y: 120}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1884937082
 MonoBehaviour:
@@ -73268,7 +73270,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LevelMapManager
   content: {fileID: 1190742838}
-  levelButtonPrefab: {fileID: 847036519616048543, guid: 74e664e165936314eaa789206b83061e, type: 3}
+  levelButtonPrefab: {fileID: 847036519616048543, guid: ea6e8ff81d9be4643836451a264fb5b7, type: 3}
   currentLevelTargetButton: {fileID: 178477211}
   totalLevels: 200
   animateCurrentLevel: 1
