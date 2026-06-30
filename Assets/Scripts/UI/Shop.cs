@@ -35,12 +35,17 @@ public class ShopManager : MonoBehaviour
     [Header("Buttons (optional runtime wiring)")]
     [Tooltip("If assigned, these are used to wire the OnClick events automatically on enable.")]
     [SerializeField] private Button buyUndo1Button;
-    [SerializeField] private Button buyUndo2Button;
     [SerializeField] private Button buyUndo3Button;
     [SerializeField] private Button buyUndo5Button;
+    [SerializeField] private Button buyUndo8Button;
+    [SerializeField] private Button buyUndo12Button;
+    [SerializeField] private Button buyUndo20Button;
     [SerializeField] private Button buyHint1Button;
-    [SerializeField] private Button buyHint2Button;
+    [SerializeField] private Button buyHint3Button;
     [SerializeField] private Button buyHint5Button;
+    [SerializeField] private Button buyHint8Button;
+    [SerializeField] private Button buyHint12Button;
+    [SerializeField] private Button buyHint20Button;
     [SerializeField] private Button backButton;
 
     [Header("Shop options")]
@@ -58,20 +63,33 @@ public class ShopManager : MonoBehaviour
     private Vector3 originalShakePos;
     private bool hasStoredOriginalPos = false;
 
-    private const int UNDO1_COST = 100;
+    // Undo pack prices and amounts
+    private const int UNDO1_COST = 85;
     private const int UNDO1_AMOUNT = 1;
-    private const int UNDO2_COST = 200;
-    private const int UNDO2_AMOUNT = 2;
-    private const int UNDO3_COST = 250;
+    private const int UNDO3_COST = 200;
     private const int UNDO3_AMOUNT = 3;
-    private const int UNDO5_COST = 400;
+    private const int UNDO5_COST = 300;
     private const int UNDO5_AMOUNT = 5;
-    private const int HINT1_COST = 150;
+    private const int UNDO8_COST = 450;
+    private const int UNDO8_AMOUNT = 8;
+    private const int UNDO12_COST = 600;
+    private const int UNDO12_AMOUNT = 12;
+    private const int UNDO20_COST = 900;
+    private const int UNDO20_AMOUNT = 20;
+
+    // Hint pack prices and amounts
+    private const int HINT1_COST = 100;
     private const int HINT1_AMOUNT = 1;
-    private const int HINT2_COST = 250;
-    private const int HINT2_AMOUNT = 2;
-    private const int HINT5_COST = 400;
+    private const int HINT3_COST = 210;
+    private const int HINT3_AMOUNT = 3;
+    private const int HINT5_COST = 350;
     private const int HINT5_AMOUNT = 5;
+    private const int HINT8_COST = 500;
+    private const int HINT8_AMOUNT = 8;
+    private const int HINT12_COST = 700;
+    private const int HINT12_AMOUNT = 12;
+    private const int HINT20_COST = 1000;
+    private const int HINT20_AMOUNT = 20;
     private void Awake()
     {
         if (Time.frameCount == 0 && shopPanel != null)
@@ -160,19 +178,21 @@ public class ShopManager : MonoBehaviour
         CloseShop();
     }
     // 2) PURCHASE LOGIC FOR BUTTONS
+    // Undo purchase methods
     public void BuyUndo1() => TryBuy(isUndo: true, coinCost: UNDO1_COST, amount: UNDO1_AMOUNT);
-    public void BuyUndo2() => TryBuy(isUndo: true, coinCost: UNDO2_COST, amount: UNDO2_AMOUNT);
     public void BuyUndo3() => TryBuy(isUndo: true, coinCost: UNDO3_COST, amount: UNDO3_AMOUNT);
     public void BuyUndo5() => TryBuy(isUndo: true, coinCost: UNDO5_COST, amount: UNDO5_AMOUNT);
+    public void BuyUndo8() => TryBuy(isUndo: true, coinCost: UNDO8_COST, amount: UNDO8_AMOUNT);
+    public void BuyUndo12() => TryBuy(isUndo: true, coinCost: UNDO12_COST, amount: UNDO12_AMOUNT);
+    public void BuyUndo20() => TryBuy(isUndo: true, coinCost: UNDO20_COST, amount: UNDO20_AMOUNT);
+
+    // Hint purchase methods
     public void BuyHint1() => TryBuy(isUndo: false, coinCost: HINT1_COST, amount: HINT1_AMOUNT);
-    public void BuyHint2() => TryBuy(isUndo: false, coinCost: HINT2_COST, amount: HINT2_AMOUNT);
+    public void BuyHint3() => TryBuy(isUndo: false, coinCost: HINT3_COST, amount: HINT3_AMOUNT);
     public void BuyHint5() => TryBuy(isUndo: false, coinCost: HINT5_COST, amount: HINT5_AMOUNT);
-    // Generic template for Hint Pack 4 just in case you add it later.
-    // You can expose a public wrapper later if needed.
-    private void BuyHint4Template(int coinCost, int hintsToGrant)
-    {
-        TryBuy(isUndo: false, coinCost: coinCost, amount: hintsToGrant);
-    }
+    public void BuyHint8() => TryBuy(isUndo: false, coinCost: HINT8_COST, amount: HINT8_AMOUNT);
+    public void BuyHint12() => TryBuy(isUndo: false, coinCost: HINT12_COST, amount: HINT12_AMOUNT);
+    public void BuyHint20() => TryBuy(isUndo: false, coinCost: HINT20_COST, amount: HINT20_AMOUNT);
     private void TryBuy(bool isUndo, int coinCost, int amount)
     {
         if (amount <= 0) return;
@@ -216,23 +236,33 @@ public class ShopManager : MonoBehaviour
     private void WireButtonsIfAssigned()
     {
         if (buyUndo1Button) buyUndo1Button.onClick.AddListener(BuyUndo1);
-        if (buyUndo2Button) buyUndo2Button.onClick.AddListener(BuyUndo2);
         if (buyUndo3Button) buyUndo3Button.onClick.AddListener(BuyUndo3);
         if (buyUndo5Button) buyUndo5Button.onClick.AddListener(BuyUndo5);
+        if (buyUndo8Button) buyUndo8Button.onClick.AddListener(BuyUndo8);
+        if (buyUndo12Button) buyUndo12Button.onClick.AddListener(BuyUndo12);
+        if (buyUndo20Button) buyUndo20Button.onClick.AddListener(BuyUndo20);
         if (buyHint1Button) buyHint1Button.onClick.AddListener(BuyHint1);
-        if (buyHint2Button) buyHint2Button.onClick.AddListener(BuyHint2);
+        if (buyHint3Button) buyHint3Button.onClick.AddListener(BuyHint3);
         if (buyHint5Button) buyHint5Button.onClick.AddListener(BuyHint5);
+        if (buyHint8Button) buyHint8Button.onClick.AddListener(BuyHint8);
+        if (buyHint12Button) buyHint12Button.onClick.AddListener(BuyHint12);
+        if (buyHint20Button) buyHint20Button.onClick.AddListener(BuyHint20);
         if (backButton) backButton.onClick.AddListener(BackButton);
     }
     private void UnwireButtonsIfAssigned()
     {
         if (buyUndo1Button) buyUndo1Button.onClick.RemoveListener(BuyUndo1);
-        if (buyUndo2Button) buyUndo2Button.onClick.RemoveListener(BuyUndo2);
         if (buyUndo3Button) buyUndo3Button.onClick.RemoveListener(BuyUndo3);
         if (buyUndo5Button) buyUndo5Button.onClick.RemoveListener(BuyUndo5);
+        if (buyUndo8Button) buyUndo8Button.onClick.RemoveListener(BuyUndo8);
+        if (buyUndo12Button) buyUndo12Button.onClick.RemoveListener(BuyUndo12);
+        if (buyUndo20Button) buyUndo20Button.onClick.RemoveListener(BuyUndo20);
         if (buyHint1Button) buyHint1Button.onClick.RemoveListener(BuyHint1);
-        if (buyHint2Button) buyHint2Button.onClick.RemoveListener(BuyHint2);
+        if (buyHint3Button) buyHint3Button.onClick.RemoveListener(BuyHint3);
         if (buyHint5Button) buyHint5Button.onClick.RemoveListener(BuyHint5);
+        if (buyHint8Button) buyHint8Button.onClick.RemoveListener(BuyHint8);
+        if (buyHint12Button) buyHint12Button.onClick.RemoveListener(BuyHint12);
+        if (buyHint20Button) buyHint20Button.onClick.RemoveListener(BuyHint20);
         if (backButton) backButton.onClick.RemoveListener(BackButton);
     }
 
