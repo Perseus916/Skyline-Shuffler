@@ -22,6 +22,12 @@ public class LevelSelectUI : MonoBehaviour
     [Tooltip("Duration of the fade-out transition when closing the level selection screen.")]
     [SerializeField] private float closeTransitionDuration = 0.2f;
 
+    [Tooltip("If true, the level select panel will scale up/down during transition.")]
+    [SerializeField] private bool useScaleTransition = true;
+
+    [Tooltip("The starting scale when opening, and target scale when closing.")]
+    [SerializeField] private float startScale = 0.7f;
+
     [Header("Locked Level Popup Panel")]
     [SerializeField] private GameObject lockedLevelPanel;
     [SerializeField] private TextMeshProUGUI lockedLevelText;
@@ -59,6 +65,22 @@ public class LevelSelectUI : MonoBehaviour
     {
         UpdateCoinsDisplay();
     }
+
+    private void OnDisable()
+    {
+        if (openAnimationCoroutine != null)
+        {
+            StopCoroutine(openAnimationCoroutine);
+            openAnimationCoroutine = null;
+        }
+
+        // Restore default scale and alpha
+        this.transform.localScale = Vector3.one;
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 1f;
+        }
+    }
     
 
     
@@ -94,24 +116,39 @@ public class LevelSelectUI : MonoBehaviour
         float duration = openTransitionDuration;
         float elapsed = 0f;
 
-        // Reset scale so the panel remains standard size at all times
-        this.transform.localScale = Vector3.one;
-
         if (canvasGroup != null)
         {
             canvasGroup.alpha = 0f;
             canvasGroup.blocksRaycasts = false;
         }
 
+        if (useScaleTransition)
+        {
+            this.transform.localScale = Vector3.one * startScale;
+        }
+        else
+        {
+            this.transform.localScale = Vector3.one;
+        }
+
         while (elapsed < duration)
         {
-            elapsed += Time.deltaTime;
-            float percent = Mathf.Clamp01(elapsed / duration);
+            elapsed += Time.unscaledDeltaTime;
+            float progress = Mathf.Clamp01(elapsed / duration);
+
+            // Cubic Ease Out: t = 1 - (1 - t)^3
+            float t = 1f - Mathf.Pow(1f - progress, 3f);
 
             if (canvasGroup != null)
             {
-                canvasGroup.alpha = percent;
+                canvasGroup.alpha = t;
             }
+
+            if (useScaleTransition)
+            {
+                this.transform.localScale = Vector3.Lerp(Vector3.one * startScale, Vector3.one, t);
+            }
+
             yield return null;
         }
 
@@ -120,6 +157,8 @@ public class LevelSelectUI : MonoBehaviour
             canvasGroup.alpha = 1f;
             canvasGroup.blocksRaycasts = true;
         }
+
+        this.transform.localScale = Vector3.one;
         openAnimationCoroutine = null;
     }
 
@@ -134,16 +173,26 @@ public class LevelSelectUI : MonoBehaviour
         }
 
         float startAlpha = canvasGroup != null ? canvasGroup.alpha : 1f;
+        Vector3 initialScale = this.transform.localScale;
 
         while (elapsed < duration)
         {
-            elapsed += Time.deltaTime;
-            float percent = Mathf.Clamp01(elapsed / duration);
+            elapsed += Time.unscaledDeltaTime;
+            float progress = Mathf.Clamp01(elapsed / duration);
+
+            // Cubic Ease In: t = t^3
+            float t = progress * progress * progress;
 
             if (canvasGroup != null)
             {
-                canvasGroup.alpha = Mathf.Lerp(startAlpha, 0f, percent);
+                canvasGroup.alpha = Mathf.Lerp(startAlpha, 0f, t);
             }
+
+            if (useScaleTransition)
+            {
+                this.transform.localScale = Vector3.Lerp(initialScale, Vector3.one * startScale, t);
+            }
+
             yield return null;
         }
 
@@ -151,7 +200,9 @@ public class LevelSelectUI : MonoBehaviour
         {
             canvasGroup.alpha = 0f;
         }
-        
+
+        this.transform.localScale = Vector3.one;
+
         if (GameManager.Instance != null)
             GameManager.Instance.ShowHomeScreen();
     }
@@ -179,16 +230,26 @@ public class LevelSelectUI : MonoBehaviour
         }
 
         float startAlpha = canvasGroup != null ? canvasGroup.alpha : 1f;
+        Vector3 initialScale = this.transform.localScale;
 
         while (elapsed < duration)
         {
-            elapsed += Time.deltaTime;
-            float percent = Mathf.Clamp01(elapsed / duration);
+            elapsed += Time.unscaledDeltaTime;
+            float progress = Mathf.Clamp01(elapsed / duration);
+
+            // Cubic Ease In: t = t^3
+            float t = progress * progress * progress;
 
             if (canvasGroup != null)
             {
-                canvasGroup.alpha = Mathf.Lerp(startAlpha, 0f, percent);
+                canvasGroup.alpha = Mathf.Lerp(startAlpha, 0f, t);
             }
+
+            if (useScaleTransition)
+            {
+                this.transform.localScale = Vector3.Lerp(initialScale, Vector3.one * startScale, t);
+            }
+
             yield return null;
         }
 
@@ -196,6 +257,8 @@ public class LevelSelectUI : MonoBehaviour
         {
             canvasGroup.alpha = 0f;
         }
+
+        this.transform.localScale = Vector3.one;
 
         if (GameManager.Instance != null)
             GameManager.Instance.PlayLevel(levelNumber);

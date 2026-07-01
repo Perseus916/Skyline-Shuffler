@@ -58,8 +58,19 @@ public class ShopManager : MonoBehaviour
     [Tooltip("Optional: RectTransform to shake (e.g. the Shop Panel window). If unassigned, falls back to shopPanel's transform.")]
     [SerializeField] private RectTransform shakeTarget;
 
+    [Header("Transition Settings")]
+    [Tooltip("How long the open/close animation takes (in seconds).")]
+    [SerializeField] private float transitionDuration = 0.25f;
+    [Tooltip("Optional CanvasGroup on the shopPanel. If null, it will look for one or add it.")]
+    [SerializeField] private CanvasGroup shopCanvasGroup;
+    [Tooltip("If true, the panel will scale up/down during transition.")]
+    [SerializeField] private bool useScaleTransition = true;
+    [Tooltip("The starting scale when opening, and target scale when closing.")]
+    [SerializeField] private float startScale = 0.7f;
+
     private Coroutine shakeCoroutine;
     private Coroutine flashCoroutine;
+    private Coroutine transitionCoroutine;
     private Vector3 originalShakePos;
     private bool hasStoredOriginalPos = false;
 
@@ -108,10 +119,31 @@ public class ShopManager : MonoBehaviour
     {
         WireButtonsIfAssigned();
         RefreshCoinDisplay();
+
+        if (transitionCoroutine != null) StopCoroutine(transitionCoroutine);
+        transitionCoroutine = StartCoroutine(AnimateShopOpen());
     }
     private void OnDisable()
     {
         UnwireButtonsIfAssigned();
+
+        // Stop layout transitions and restore scale/alpha
+        if (transitionCoroutine != null)
+        {
+            StopCoroutine(transitionCoroutine);
+            transitionCoroutine = null;
+        }
+
+        GameObject target = GetAnimationTarget();
+        if (target != null)
+        {
+            target.transform.localScale = Vector3.one;
+            CanvasGroup cg = shopCanvasGroup != null ? shopCanvasGroup : target.GetComponent<CanvasGroup>();
+            if (cg != null)
+            {
+                cg.alpha = 1f;
+            }
+        }
 
         // Ensure positions and overlays are reset when panel is closed/disabled
         if (shakeCoroutine != null)
@@ -121,10 +153,10 @@ public class ShopManager : MonoBehaviour
         }
         if (hasStoredOriginalPos)
         {
-            Transform target = shakeTarget != null ? shakeTarget : (shopPanel != null ? shopPanel.transform : transform);
-            if (target != null)
+            Transform shakeTargetTransform = shakeTarget != null ? shakeTarget : (shopPanel != null ? shopPanel.transform : transform);
+            if (shakeTargetTransform != null)
             {
-                target.localPosition = originalShakePos;
+                shakeTargetTransform.localPosition = originalShakePos;
             }
             hasStoredOriginalPos = false;
         }
@@ -154,15 +186,29 @@ public class ShopManager : MonoBehaviour
     {
         if (shopPanel != null)
         {
-            shopPanel.SetActive(true);
+            if (!shopPanel.activeSelf)
+            {
+                shopPanel.SetActive(true);
+            }
+            else
+            {
+                if (transitionCoroutine != null) StopCoroutine(transitionCoroutine);
+                transitionCoroutine = StartCoroutine(AnimateShopOpen());
+            }
+        }
+        else
+        {
+            if (transitionCoroutine != null) StopCoroutine(transitionCoroutine);
+            transitionCoroutine = StartCoroutine(AnimateShopOpen());
         }
         RefreshCoinDisplay();
     }
     public void CloseShop()
     {
-        if (shopPanel != null)
+        if (shopPanel != null && shopPanel.activeSelf)
         {
-            shopPanel.SetActive(false);
+            if (transitionCoroutine != null) StopCoroutine(transitionCoroutine);
+            transitionCoroutine = StartCoroutine(AnimateShopClose());
         }
         else
         {
@@ -176,6 +222,102 @@ public class ShopManager : MonoBehaviour
             AudioManager.Instance.PlayButtonClick();
             
         CloseShop();
+    }
+
+    private GameObject GetAnimationTarget()
+    {
+        return shopPanel != null ? shopPanel : gameObject;
+    }
+
+    private CanvasGroup GetOrAddCanvasGroup(GameObject target)
+    {
+        if (shopCanvasGroup != null) return shopCanvasGroup;
+        if (target == null) return null;
+
+        shopCanvasGroup = target.GetComponent<CanvasGroup>();
+        if (shopCanvasGroup == null)
+        {
+            shopCanvasGroup = target.AddComponent<CanvasGroup>();
+        }
+        return shopCanvasGroup;
+    }
+
+    private IEnumerator AnimateShopOpen()
+    {
+        GameObject target = GetAnimationTarget();
+        CanvasGroup cg = GetOrAddCanvasGroup(target);
+        Transform targetTransform = target.transform;
+
+        cg.alpha = 0f;
+        if (useScaleTransition)
+        {
+            targetTransform.localScale = Vector3.one * startScale;
+        }
+
+        float elapsed = 0f;
+        while (elapsed < transitionDuration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float progress = Mathf.Clamp01(elapsed / transitionDuration);
+            
+            // Cubic Ease Out: t = 1 - (1 - t)^3
+            float t = 1f - Mathf.Pow(1f - progress, 3f);
+
+            cg.alpha = t;
+            if (useScaleTransition)
+            {
+                targetTransform.localScale = Vector3.Lerp(Vector3.one * startScale, Vector3.one, t);
+            }
+            yield return null;
+        }
+
+        cg.alpha = 1f;
+        if (useScaleTransition)
+        {
+            targetTransform.localScale = Vector3.one;
+        }
+    }
+
+    private IEnumerator AnimateShopClose()
+    {
+        GameObject target = GetAnimationTarget();
+        CanvasGroup cg = GetOrAddCanvasGroup(target);
+        Transform targetTransform = target.transform;
+
+        float startAlpha = cg.alpha;
+        Vector3 initialScale = targetTransform.localScale;
+
+        float elapsed = 0f;
+        while (elapsed < transitionDuration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float progress = Mathf.Clamp01(elapsed / transitionDuration);
+            
+            // Cubic Ease In: t = t^3
+            float t = progress * progress * progress;
+
+            cg.alpha = Mathf.Lerp(startAlpha, 0f, t);
+            if (useScaleTransition)
+            {
+                targetTransform.localScale = Vector3.Lerp(initialScale, Vector3.one * startScale, t);
+            }
+            yield return null;
+        }
+
+        cg.alpha = 0f;
+        if (useScaleTransition)
+        {
+            targetTransform.localScale = Vector3.one * startScale;
+        }
+
+        if (shopPanel != null)
+        {
+            shopPanel.SetActive(false);
+        }
+        else
+        {
+            gameObject.SetActive(false);
+        }
     }
     // 2) PURCHASE LOGIC FOR BUTTONS
     // Undo purchase methods
